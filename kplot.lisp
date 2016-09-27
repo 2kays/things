@@ -1,8 +1,8 @@
 (defpackage #:kplot
   (:use :cl :asdf)
   (:export :vals
-	   :plot
-	   :pprint-plot))
+           :plot
+           :pprint-plot))
 
 (in-package #:kplot)
 
@@ -20,15 +20,15 @@
   (flet ((maxlist (list) (reduce #'max list)))
     (loop :for y :in values :collect
        (loop :with sy = (+ offset (* scale y))
-	  :for count :from 0 :to (+ offset (* scale (maxlist values)))
-	  :collect (if (< count sy) fg bg)))))
+          :for count :from 0 :to (+ offset (* scale (maxlist values)))
+          :collect (if (< count sy) fg bg)))))
 
 (defun pprint-plot (pdata &key (output-stream 't) (style 'vertical))
   "Pretty-prints a plot PDATA to OUTPUT-STREAM using STYLE."
   (labels ((cat (list) (concatenate 'string list))
-	   (reorient (lists) (reverse (apply #'mapcar #'list lists))))
+           (reorient (lists) (reverse (apply #'mapcar #'list lists))))
     (format output-stream "~{~a~%~}"
-	    (case style
-	      (vertical   (mapcar #'cat pdata))
-	      (horizontal (mapcar #'cat (reorient pdata)))
-	      (otherwise  (error "Invalid style specified."))))))
+            (case style
+              (vertical   (mapcar #'cat pdata))
+              (horizontal (mapcar #'cat (reorient pdata)))
+              (otherwise  (error "Invalid style specified."))))))
