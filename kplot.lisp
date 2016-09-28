@@ -1,5 +1,5 @@
 (defpackage #:kplot
-  (:use :cl :asdf)
+  (:use :cl)
   (:export :vals
            :plot
            :pprint-plot))
@@ -12,7 +12,7 @@
 ;; (pprint-plot (plot (vals #'sin :step 0.25 :min -10 :max 10) :scale 10 :offset 10) :style 'horizontal)
 
 (defun vals (f &key (min -3) (max 3) (step 0.25))
-  "Generates values for F between (MIN, MAX) stepping by STEP."
+  "Generates values for F between [MIN, MAX] stepping by STEP."
   (loop :for x :from min :to max :by step :collect (funcall f x)))
 
 (defun plot (values &key (scale 1) (offset 0) (fg #\*) (bg #\.))
