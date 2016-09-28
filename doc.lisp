@@ -1,18 +1,22 @@
 (defpackage :#kdoc
   :use :cl)
 
-(defun docfun (expr &key (output-stream t))
-  (case (car expr)
+;; markdown documention generator
+(defun docfun (form &key output-stream)
+  "Prints markdown documentation for `form` to `output-stream`."
+  (case (car form)
     ((defun defmacro)
-     (let ((name (elt expr 1))
-           (arglist (elt expr 2))
-           (docstring (elt expr 3)))
+     (let ((name (elt form 1))
+           (arglist (elt form 2))
+           (docstring (elt form 3)))
        (format output-stream "## ~a~%~%### ~{~a ~}~%~@[~%~a~%~]~%"
-               name arglist (if (stringp docstring) docstring nil))))))
+               name arglist (if (stringp docstring) docstring nil))))
+    (otherwise "")))
 
 (defun docfuns (forms)
-  (dolist (form forms)
-    (docfun form)))
+  "Document a list of forms"
+  (apply #'concatenate 'string
+               (mapcar #'(lambda (form) (docfun form)) forms)))
 
 (defun docfile (file)
   (with-open-file (s file)
