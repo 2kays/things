@@ -10,7 +10,7 @@
 (defun my-echo-server ()
   (format t "Starting server.~%")
   (setf *tcp-server-instance*
-        (as:tcp-server nil 9003         ; nil is "0.0.0.0"
+        (as:tcp-server nil 9003         ;; nil is "0.0.0.0"
                        (lambda (socket data)
                          ;; echo the data back into the socket
                          (format t "Received ~a~%" data)
@@ -33,3 +33,4 @@
     (force-output (usocket:socket-stream stream))
     (print (read (usocket:socket-stream stream)))
     (usocket:socket-close stream)))
+
