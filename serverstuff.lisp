@@ -1,7 +1,6 @@
 (defpackage #:kserv
   (:use :cl
-        :cl-async
-        :usocket))
+        :cl-async))
 
 (in-package :kserv)
 
