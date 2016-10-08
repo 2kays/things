@@ -1,19 +1,13 @@
 
 ;; Generic file for generic things/exercises etc.
 
-(defun divis-by (n &rest divisors)
-  (if (not (null divisors))
-      (and (zerop (mod n (car divisors)))
-           (apply #'divis-by n (cdr divisors)))
-      t))
+(defun filter-div (n list)
+  "Filters non-divisors of `n` in `list`."
+  (remove-if-not (lambda (x) (zerop (mod n x))) list))
 
-(defun divis-by (n &rest divisors)
-  (reduce (lambda (x y) (and (zerop (mod x n))))))
-
-(defun divis-by (n &rest divisors)
-  (eq (length (remove-if-not (lambda (x) (zerop (mod n x))) divisors))
-      (length divisors)))
-
-(defun fizzbuzz (n)
-  (dotimes (x n)
-    (cond ((divis-by )))))
+(defun divisiblep (n divisors &key (function #'mod))
+  "Checks if `n` is divisible (using `function`) by all in `divisors`."
+  (if (null divisors)
+      t
+      (and (zerop (funcall function n (car divisors)))
+           (divisiblep n (cdr divisors)))))
