@@ -16,8 +16,15 @@
   "Alias for `concatenate 'string`."
   (apply #'concatenate 'string strs))
 
-(defmacro if-let (bindings then-form &rest else-form)
-  `(let ,bindings
-     (if (and ,@(loop :for form :in bindings :collect (car form)))
-         ,then-form
-         ,@(when else-form else-form))))
+(defmacro if-let (bindings then-form &optional else-form)
+  "Binds `bindings` of the form `(var initial)` or
+ `((var1 initial1) ... (varN initialN))` and evals `then-form` if all vars are
+ not nil, otherwise `else-form` is evaluated (if it exists). Binding is done
+ by the `let` form. "
+  (let ((newbinds (if (and (consp bindings) (symbolp (car bindings)))
+                      (list bindings)
+                      bindings)))
+    `(let ,newbinds
+       (if (and ,@(loop :for form :in newbinds :collect (car form)))
+           ,then-form
+           ,else-form))))
