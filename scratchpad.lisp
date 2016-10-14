@@ -28,3 +28,15 @@
        (if (and ,@(loop :for form :in newbinds :collect (car form)))
            ,then-form
            ,else-form))))
+
+(defun c-r (list cons)
+  "Arbitrary composition of car and cdr. e.g.
+ * (C-R '(a d) lst) <=> (cadr lst)
+ * (C-R '(a d d a d) lst) <=> (caddadr lst)"
+  (labels ((compose (l c)
+             (if (null l)
+                 c
+                 (if (eql 'a (first l))
+                     (c-r (rest l) (car c))
+                     (c-r (rest l) (cdr c))))))
+    (compose (reverse list) cons)))
