@@ -64,14 +64,9 @@
                    
                    (charms:move-cursor charms:*standard-window* x y)))))))
 
+;;
 ;; Yet Another Messy Amateur Text Editor
 ;; YAMATE
-;;
-;; Fully Extensible Text Insertion System H..
-;; FETISH
-;;
-;; It's Like Emacs But Sh*t
-;; ILEBS
 ;;
 ;; BabEmacs/Babbymacs
 ;;
