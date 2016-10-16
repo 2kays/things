@@ -37,6 +37,7 @@
              (if (null l)
                  c
                  (if (eql 'a (first l))
-                     (c-r (rest l) (car c))
-                     (c-r (rest l) (cdr c))))))
+                     (compose (rest l) (car c))
+                     (compose (rest l) (cdr c))))))
     (compose (reverse list) cons)))
+
