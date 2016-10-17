@@ -81,17 +81,26 @@
                      ((#\Ack) (incf x))
                      ((#\Stx) (decf x))
                      ;; Return
-                     ((#\Lf) (let* ((s1 (subseq file-state 0 y))
-                                    (s2 (subseq file-state y)))
-                               (setf file-state (concatenate 'list s1 (list "") s2))
-                               (incf y)))
-                     ;; C-d
-                     ;; TODO: refactor this string splicing into one function
-                     ((#\Eot) (let* ((line (elt file-state y))
-                                     (s1 (subseq line 0 x))
-                                     (s2 (subseq line (1+ x))))
+                     ((#\Lf) (let* ((line (elt file-state y))
+                                    (l1 (subseq file-state 0 y))
+                                    (l2 (subseq file-state (1+ y)))
+                                    (s1 (subseq line 0 x))
+                                    (s2 (subseq line x)))
+                               (setf file-state (concatenate 'list l1 (list s1) (list s2) l2))
+                               (incf y)
+                               (setf x 0)))
+                     ;; Backspace
+                     ((#\Del) (let* ((line (elt file-state y))
+                                     (s1 (subseq line 0 (1- x)))
+                                     (s2 (subseq line x)))
                                 (setf (elt file-state y) (format nil "~a~a" s1 s2))
                                 (decf x)))
+                     ;; C-d / delete
+                     ;; TODO: refactor this string splicing into one function
+                     ((#\Eot #\Bs) (let* ((line (elt file-state y))
+                                          (s1 (subseq line 0 x))
+                                          (s2 (subseq line (1+ x))))
+                                     (setf (elt file-state y) (format nil "~a~a" s1 s2))))
                      ;; C-x quits 
                      ((#\Can) (return-from driver-loop))
                      ;; 32 to 126 are printable characters
