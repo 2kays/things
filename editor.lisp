@@ -28,6 +28,13 @@
       (read-sequence str f)
       str)))
 
+(defun insert-at (item list index)
+  (cond
+    ((< index 1) (error "Index too small ~A" index))
+    ((= index 1) (cons item list))
+    (t (push item (cdr (nthcdr (- index 2) list)))
+       list)))
+
 (defparameter *current-buffer* nil)
 (defparameter *file* nil)
 
@@ -79,9 +86,10 @@
                      ((#\Can) (return-from driver-loop))
                      ;; 32 to 126 are printable characters
                      (t (if (and (> (char-code c) 31) (< (char-code c) 127))
-                            (progn
-                              ;(insert-char-at-point charms:*standard-window* c x y)
-                              
+                            (let* ((line (elt file-state y))
+                                   (s1 (subseq line 0 x))
+                                   (s2 (subseq line x)))
+                              (setf (elt file-state y) (format nil "~a~a~a" s1 c s2))
                               (incf x)))))
                    (multiple-value-bind (cx cy) (clamp x y file-state)
                      (setf x cx)
