@@ -80,8 +80,18 @@
                      ((#\Dle) (decf y))
                      ((#\Ack) (incf x))
                      ((#\Stx) (decf x))
+                     ;; Return
+                     ((#\Lf) (let* ((s1 (subseq file-state 0 y))
+                                    (s2 (subseq file-state y)))
+                               (setf file-state (concatenate 'list s1 (list "") s2))
+                               (incf y)))
                      ;; C-d
-                     ((#\Eot) (decf x))
+                     ;; TODO: refactor this string splicing into one function
+                     ((#\Eot) (let* ((line (elt file-state y))
+                                     (s1 (subseq line 0 x))
+                                     (s2 (subseq line (1+ x))))
+                                (setf (elt file-state y) (format nil "~a~a" s1 s2))
+                                (decf x)))
                      ;; C-x quits 
                      ((#\Can) (return-from driver-loop))
                      ;; 32 to 126 are printable characters
