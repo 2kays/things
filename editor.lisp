@@ -28,22 +28,8 @@
       (read-sequence str f)
       str)))
 
-(defun insert-at (item list index)
-  (cond
-    ((< index 1) (error "Index too small ~A" index))
-    ((= index 1) (cons item list))
-    (t (push item (cdr (nthcdr (- index 2) list)))
-       list)))
-
 (defparameter *current-buffer* nil)
 (defparameter *file* nil)
-
-(defun write-mode-line ()
-  (multiple-value-bind (w h)
-      (charms:window-dimensions charms:*standard-window*)
-    (charms:write-string-at-point charms:*standard-window*
-                                  "Kek"
-                                  0 (1- h))))
 
 (defun state-to-string (state)
   (reduce (lambda (s1 s2) (format nil "~a~%~a" s1 s2)) state))
@@ -72,7 +58,6 @@
              :for c := (charms:get-char charms:*standard-window* :ignore-error t)
              :do (progn
                    (charms:refresh-window charms:*standard-window*)
-                   ;;(write-mode-line)
                    (case c
                      ((nil) nil)
                      ;; C-fbpn movement
