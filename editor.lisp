@@ -13,7 +13,7 @@
 ;;           cursor is moved for standard editing commands
 ;;
 
-(defstruct buffer
+(defstruct (buffer (:conc-name buf-))
   (name "buffer" :type string)
   (modified nil :type boolean)
   (state '() :type list)
@@ -69,7 +69,7 @@
     (sm-helper seq 0 positions)))
 
 (defparameter *key-map*
-  '((#\So . (lambda (&rest a) (incf y)))))
+  '((#\So . (lambda (&rest a) (incf (buf-cursor-y *current-buffer*))))))
 
 (defun main (&rest argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -83,34 +83,35 @@
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
-           :with x := 0
-           :with y := 0
-           :with file-state := (buffer-state *current-buffer*)
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+           :for file-state := (buf-state *current-buffer*)
+           :for x := (buf-cursor-x *current-buffer*)
+           :for y := (buf-cursor-y *current-buffer*)
            :do
            (charms:refresh-window charms:*standard-window*)
            (case c
              ((nil) nil)
              ;; C-fbpn movement
-             ((#\So) (incf y))
-             ((#\Dle) (decf y))
-             ((#\Ack) (incf x))
-             ((#\Stx) (decf x))
-             ;; Return
+             ((#\So) (incf (buf-cursor-y *current-buffer*)))
+             ((#\Dle) (decf (buf-cursor-y *current-buffer*)))
+             ((#\Ack) (incf (buf-cursor-x *current-buffer*)))
+             ((#\Stx) (decf (buf-cursor-x *current-buffer*)))
+             ;; Meta
              ((#\Esc) (setf (elt file-state y) "Meta"))
+             ;; Return
              ((#\Lf) (let* ((line (elt file-state y))
                             (l1 (subseq file-state 0 y))
                             (l2 (subseq file-state (1+ y)))
                             (s1 (subseq line 0 x))
                             (s2 (subseq line x)))
                        (setf file-state (concatenate 'list l1 (list s1) (list s2) l2))
-                       (incf y)
-                       (setf x 0)))
+                       (incf (buf-cursor-y *current-buffer*))
+                       (setf (buf-cursor-x *current-buffer*) 0)))
              ;; Backspace
              ((#\Del) (destructuring-bind (s1 _ s2)
                           (split-many (elt file-state y) (1- x) x)
                         (setf (elt file-state y) (concat s1 s2))
-                        (decf x)))
+                        (decf (buf-cursor-x *current-buffer*))))
              ;; C-d / delete
              ;; TODO: refactor this string splicing into one function
              ((#\Eot #\Bs) (destructuring-bind (s1 _ s2)
@@ -123,10 +124,12 @@
                     (destructuring-bind (s1 s2)
                         (split-at (elt file-state y) x)
                       (setf (elt file-state y) (format nil "~a~a~a" s1 c s2))
-                      (incf x)))))
-           (multiple-value-bind (cx cy) (clamp x y file-state)
-             (setf x cx)
-             (setf y cy)
+                      (incf (buf-cursor-x *current-buffer*))))))
+           (multiple-value-bind (cx cy) (clamp (buf-cursor-x *current-buffer*)
+                                               (buf-cursor-y *current-buffer*)
+                                               file-state)
+             (setf (buf-cursor-x *current-buffer*) cx)
+             (setf (buf-cursor-y *current-buffer*) cy)
              (charms:write-string-at-point charms:*standard-window*
                                            (state-to-string file-state) 0 0)
              (charms:move-cursor charms:*standard-window* cx cy))))))
