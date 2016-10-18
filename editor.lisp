@@ -23,10 +23,6 @@
 (defparameter *current-buffer* nil)
 (defun current-buffer () *current-buffer*)
 
-(defmacro with-current-buffer (buffer &body body)
-  `(let ((,(first buffer) *current-buffer*))
-     ,@body))
-
 (defun concat (&rest args)
   (apply #'concatenate 'string args))
 
@@ -73,13 +69,11 @@
     (sm-helper seq 0 positions)))
 
 (defparameter *key-map*
-  '((#\So . (lambda (&rest a)
-              (with-current-buffer (b)
-                (incf (buf-cursor-y b)))))))
+  '((#\So . (lambda (&rest a)))))
 
-(defun main (&rest argv)
+(defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-  (let ((bname (if argv "buffer1"))
+  (let ((bname (if argv (first argv) "buffer1"))
         (bstate (if argv
                     (file-to-list (first argv))
                     (list ""))))
