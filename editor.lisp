@@ -55,7 +55,7 @@
   "Split a sequence SEQ at position POS."
   (let ((s1 (subseq seq 0 pos))
         (s2 (subseq seq pos)))
-    (values s1 s2)))
+    (list s1 s2)))
 
 (defun split-many (seq &rest positions)
   "Split a sequence SEQ at POSITIONS."
@@ -63,7 +63,7 @@
              (if (null positions)
                  (list seq)
                  (let ((pos (first positions)))
-                   (multiple-value-bind (s1 s2)
+                   (destructuring-bind (s1 s2)
                        (split-at seq (- pos offset))
                      (cons s1 (sm-helper s2 pos (rest positions))))))))
     (sm-helper seq 0 positions)))
@@ -107,23 +107,21 @@
                        (incf y)
                        (setf x 0)))
              ;; Backspace
-             ((#\Del) (let* ((line (elt file-state y))
-                             (s1 (subseq line 0 (1- x)))
-                             (s2 (subseq line x)))
-                        (setf (elt file-state y) (format nil "~a~a" s1 s2))
+             ((#\Del) (destructuring-bind (s1 _ s2)
+                          (split-many (elt file-state y) (1- x) x)
+                        (setf (elt file-state y) (concat s1 s2))
                         (decf x)))
              ;; C-d / delete
              ;; TODO: refactor this string splicing into one function
-             ((#\Eot #\Bs) (destructuring-bind (a _ c)
+             ((#\Eot #\Bs) (destructuring-bind (s1 _ s2)
                                (split-many (elt file-state y) x (1+ x))
-                             (setf (elt file-state y) (concat a c))))
+                             (setf (elt file-state y) (concat s1 s2))))
              ;; C-x quits
              ((#\Can) (return-from driver-loop))
              ;; 32 to 126 are printable characters
              (t (if (and (> (char-code c) 31) (< (char-code c) 127))
-                    (let* ((line (elt file-state y))
-                           (s1 (subseq line 0 x))
-                           (s2 (subseq line x)))
+                    (destructuring-bind (s1 s2)
+                        (split-at (elt file-state y) x)
                       (setf (elt file-state y) (format nil "~a~a~a" s1 c s2))
                       (incf x)))))
            (multiple-value-bind (cx cy) (clamp x y file-state)
