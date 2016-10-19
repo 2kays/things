@@ -68,8 +68,27 @@
                      (cons s1 (sm-helper s2 pos (rest positions))))))))
     (sm-helper seq 0 positions)))
 
+(defun forward (&optional (delta 1))
+  "Moves the cursor forward "
+  (incf (buf-cursor-x (current-buffer)) delta))
+
+(defun backward (&optional (delta 1))
+  "Moves the cursor forward "
+  (decf (buf-cursor-x (current-buffer)) delta))
+
+(defun up (&optional (delta 1))
+  "Moves the cursor forward "
+  (incf (buf-cursor-y (current-buffer)) delta))
+
+(defun down (&optional (delta 1))
+  "Moves the cursor forward "
+  (decf (buf-cursor-y (current-buffer)) delta))
+
 (defparameter *key-map*
-  '((#\So . (lambda (&rest a)))))
+  '((#\Ack . forward)
+    (#\Stx . backward)
+    (#\So . up)
+    (#\Dle . down)))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -86,18 +105,16 @@
     (charms:enable-non-blocking-mode charms:*standard-window*)
     (loop :named driver-loop
        :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+       :for current := *current-buffer*
        :do
        (charms:refresh-window charms:*standard-window*)
        (with-accessors ((name buf-name) (x buf-cursor-x)
                         (y buf-cursor-y) (state buf-state))
-           *current-buffer*
+           current
+         (let ((entry (assoc c *key-map*)))
+           (when entry (funcall (cdr entry))))
          (case c
            ((nil) nil)
-           ;; C-fbpn movement
-           ((#\So) (incf y))
-           ((#\Dle) (decf y))
-           ((#\Ack) (incf x))
-           ((#\Stx) (decf x))
            ;; Meta
            ((#\Esc) (setf (elt state y) "Meta"))
            ;; Return
@@ -112,12 +129,14 @@
            ;; Backspace
            ((#\Del) (destructuring-bind (s1 _ s2)
                         (split-many (elt state y) (1- x) x)
+                      (declare (ignore _))
                       (setf (elt state y) (concat s1 s2))
                       (decf x)))
            ;; C-d / delete
            ;; TODO: refactor this string splicing into one function
            ((#\Eot #\Bs) (destructuring-bind (s1 _ s2)
                              (split-many (elt state y) x (1+ x))
+                           (declare (ignore _))
                            (setf (elt state y) (concat s1 s2))))
            ;; C-x quits
            ((#\Can) (return-from driver-loop))
