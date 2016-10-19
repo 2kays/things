@@ -6,7 +6,7 @@
 
 ;; (ql:quickload '(:swank) :silent t)
 ;; (swank:create-server :port 4006 :dont-close t)
-
+;;
 ;; Concepts:
 ;;  STATE - list of lines, the buffer contents
 ;;  CURSOR - x, y, constrained to the bounds of the state
@@ -73,9 +73,9 @@
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-  (let ((bname (if argv (first argv) "buffer1"))
+  (let ((bname (or argv "buffer1"))
         (bstate (if argv
-                    (file-to-list (first argv))
+                    (file-to-list argv)
                     (list ""))))
     (setf *current-buffer*
           (make-buffer :name bname :state bstate)))
