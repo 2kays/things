@@ -86,60 +86,53 @@
     (charms:enable-non-blocking-mode charms:*standard-window*)
     (loop :named driver-loop
        :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-       ;; :for file-state := (buf-state *current-buffer*)
-       ;; :for x := (buf-cursor-x *current-buffer*)
-       ;; :for y := (buf-cursor-y *current-buffer*)
        :do
        (charms:refresh-window charms:*standard-window*)
-       (with-accessors ((name buf-name)
-                        (x buf-cursor-x)
-                        (y buf-cursor-y)
-                        (file-state buf-state))
+       (with-accessors ((name buf-name) (x buf-cursor-x)
+                        (y buf-cursor-y) (state buf-state))
            *current-buffer*
          (case c
            ((nil) nil)
            ;; C-fbpn movement
-           ((#\So) (incf (buf-cursor-y *current-buffer*)))
-           ((#\Dle) (decf (buf-cursor-y *current-buffer*)))
-           ((#\Ack) (incf (buf-cursor-x *current-buffer*)))
-           ((#\Stx) (decf (buf-cursor-x *current-buffer*)))
+           ((#\So) (incf y))
+           ((#\Dle) (decf y))
+           ((#\Ack) (incf x))
+           ((#\Stx) (decf x))
            ;; Meta
-           ((#\Esc) (setf (elt file-state y) "Meta"))
+           ((#\Esc) (setf (elt state y) "Meta"))
            ;; Return
-           ((#\Lf) (let* ((line (elt file-state y))
-                          (l1 (subseq file-state 0 y))
-                          (l2 (subseq file-state (1+ y)))
+           ((#\Lf) (let* ((line (elt state y))
+                          (l1 (subseq state 0 y))
+                          (l2 (subseq state (1+ y)))
                           (s1 (subseq line 0 x))
                           (s2 (subseq line x)))
-                     (setf file-state (concatenate 'list l1 (list s1) (list s2) l2))
-                     (incf (buf-cursor-y *current-buffer*))
-                     (setf (buf-cursor-x *current-buffer*) 0)))
+                     (setf state (concatenate 'list l1 (list s1) (list s2) l2))
+                     (incf y)
+                     (setf x 0)))
            ;; Backspace
            ((#\Del) (destructuring-bind (s1 _ s2)
-                        (split-many (elt file-state y) (1- x) x)
-                      (setf (elt file-state y) (concat s1 s2))
-                      (decf (buf-cursor-x *current-buffer*))))
+                        (split-many (elt state y) (1- x) x)
+                      (setf (elt state y) (concat s1 s2))
+                      (decf x)))
            ;; C-d / delete
            ;; TODO: refactor this string splicing into one function
            ((#\Eot #\Bs) (destructuring-bind (s1 _ s2)
-                             (split-many (elt file-state y) x (1+ x))
-                           (setf (elt file-state y) (concat s1 s2))))
+                             (split-many (elt state y) x (1+ x))
+                           (setf (elt state y) (concat s1 s2))))
            ;; C-x quits
            ((#\Can) (return-from driver-loop))
            ;; 32 to 126 are printable characters
            (t (if (and (> (char-code c) 31) (< (char-code c) 127))
                   (destructuring-bind (s1 s2)
-                      (split-at (elt file-state y) x)
-                    (setf (elt file-state y) (format nil "~a~a~a" s1 c s2))
-                    (incf (buf-cursor-x *current-buffer*))))))
-         (multiple-value-bind (cx cy) (clamp (buf-cursor-x *current-buffer*)
-                                             (buf-cursor-y *current-buffer*)
-                                             file-state)
-           (setf (buf-cursor-x *current-buffer*) cx)
-           (setf (buf-cursor-y *current-buffer*) cy)
+                      (split-at (elt state y) x)
+                    (setf (elt state y) (format nil "~a~a~a" s1 c s2))
+                    (incf x)))))
+         (multiple-value-bind (cx cy) (clamp x y state)
+           (setf x cx)
+           (setf y cy)
            (charms:write-string-at-point charms:*standard-window*
-                                         (state-to-string file-state) 0 0)
-           (charms:move-cursor charms:*standard-window* cx cy))))))
+                                         (state-to-string state) 0 0)
+           (charms:move-cursor charms:*standard-window* x y))))))
 ;;
 ;; Yet Another Messy Amateur Text Editor
 ;; YAMATE
