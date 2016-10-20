@@ -20,6 +20,9 @@
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer))
 
+(defparameter *editor-running* nil
+  "The editors running state.")
+
 (defparameter *current-buffer* nil)
 (defun current-buffer () *current-buffer*)
 
@@ -38,9 +41,10 @@
       (read-sequence str f)
       str)))
 
-(defun state-to-string (state)
-  "Reduce editor state by flattening STATE to a string, inserting newlines."
-  (reduce (lambda (s1 s2) (format nil "~a~%~a" s1 s2)) state))
+(defun state-to-string (state &key newline)
+  "Reduce editor state by flattening STATE to a string with newlines, with the 
+key argument NEWLINE specifying if an additional newline is added to the end."
+  (concat (format nil "~{~a~^~%~}" state) (and newline (string #\nl))))
 
 (defun clamp (x y state)
   "Clamp the cursor with position X Y to the bounds of the editor state STATE."
@@ -69,19 +73,19 @@
     (sm-helper seq 0 positions)))
 
 (defun forward (&optional (delta 1))
-  "Moves the cursor forward "
+  "Moves the cursor forward."
   (incf (buf-cursor-x (current-buffer)) delta))
 
 (defun backward (&optional (delta 1))
-  "Moves the cursor forward "
+  "Moves the cursor backward."
   (decf (buf-cursor-x (current-buffer)) delta))
 
 (defun up (&optional (delta 1))
-  "Moves the cursor forward "
+  "Moves the cursor up. "
   (incf (buf-cursor-y (current-buffer)) delta))
 
 (defun down (&optional (delta 1))
-  "Moves the cursor forward "
+  "Moves the cursor down."
   (decf (buf-cursor-y (current-buffer)) delta))
 
 (defun backspace ()
@@ -90,9 +94,9 @@
         (y (buf-cursor-y (current-buffer))))
     (setf (elt (buf-state (current-buffer)) y)
           (remove-if (constantly t)
-                     (buf-state (current-buffer))
+                     (elt (buf-state (current-buffer)) y)
                      :start (1- x) :count 1)))
-  (incf (buf-cursor-x (current-buffer))))
+  (decf (buf-cursor-x (current-buffer))))
 
 (defun delete-char ()
   "Deletes character at cursor."
@@ -100,8 +104,12 @@
         (y (buf-cursor-y (current-buffer))))
     (setf (elt (buf-state (current-buffer)) y)
           (remove-if (constantly t)
-                     (buf-state (current-buffer))
+                     (elt (buf-state (current-buffer)) y)
                      :start x :count 1))) )
+
+(defun exit-editor (&optional force)
+  "Exits the editor."
+  (setf *editor-running* nil))
 
 (defparameter *key-map*
   '((#\Ack . forward)
@@ -110,10 +118,12 @@
     (#\Dle . down)
     (#\Del . backspace)
     (#\Eot . delete-char) ;; C-d
-    (#\Bs . delete-char)))
+    (#\Bs . delete-char)
+    (#\Can . exit-editor)))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
+  (setf *editor-running* t)
   (let ((bname (or argv "buffer1"))
         (bstate (if argv
                     (file-to-list argv)
@@ -126,6 +136,7 @@
     (charms:enable-raw-input :interpret-control-characters t)
     (charms:enable-non-blocking-mode charms:*standard-window*)
     (loop :named driver-loop
+       :while *editor-running*
        :for c := (charms:get-char charms:*standard-window* :ignore-error t)
        :for current := *current-buffer*
        :do
@@ -148,8 +159,6 @@
                      (setf state (concatenate 'list l1 (list s1) (list s2) l2))
                      (incf y)
                      (setf x 0)))
-           ;; C-x quits
-           ((#\Can) (return-from driver-loop))
            ;; 32 to 126 are printable characters
            (t (if (and (> (char-code c) 31) (< (char-code c) 127))
                   (destructuring-bind (s1 s2)
@@ -160,6 +169,6 @@
            (setf x cx)
            (setf y cy)
            (charms:write-string-at-point charms:*standard-window*
-                                         (state-to-string state) 0 0)
+                                         (state-to-string state :newline t) 0 0) 
            (charms:move-cursor charms:*standard-window* x y))))))
 
