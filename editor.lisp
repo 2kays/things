@@ -72,6 +72,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                      (cons s1 (sm-helper s2 pos (rest positions))))))))
     (sm-helper seq 0 positions)))
 
+(defun remove-at (seq pos &key (count 1))
+  "Removes COUNT entries at position POS of SEQ."
+  (remove-if (constantly t) seq :start pos :count count))
+
 (defun forward (&optional (delta 1))
   "Moves the cursor forward."
   (incf (buf-cursor-x (current-buffer)) delta))
@@ -90,25 +94,20 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun backspace ()
   "Backspaces from cursor."
-  (let ((x (buf-cursor-x (current-buffer)))
-        (y (buf-cursor-y (current-buffer))))
-    (setf (elt (buf-state (current-buffer)) y)
-          (remove-if (constantly t)
-                     (elt (buf-state (current-buffer)) y)
-                     :start (1- x) :count 1)))
-  (decf (buf-cursor-x (current-buffer))))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (setf (elt state y) (remove-at (elt state y) (1- x)))
+    (decf x)))
 
 (defun delete-char ()
-  "Deletes character at cursor."
-  (let ((x (buf-cursor-x (current-buffer)))
-        (y (buf-cursor-y (current-buffer))))
-    (setf (elt (buf-state (current-buffer)) y)
-          (remove-if (constantly t)
-                     (elt (buf-state (current-buffer)) y)
-                     :start x :count 1))) )
+  "Backspaces from cursor."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (setf (elt state y) (remove-at (elt state y) x))))
 
 (defun exit-editor (&optional force)
   "Exits the editor."
+  (if (not force) nil) ;; change this to ask the user if they're sure
   (setf *editor-running* nil))
 
 (defparameter *key-map*
