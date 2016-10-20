@@ -96,7 +96,14 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Backspaces from cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
       (current-buffer)
-    (setf (elt state y) (remove-at (elt state y) (1- x)))
+    (if (zerop x)
+        (let ((line (elt state y))
+              (prevline (elt state (1- y))))
+          (setf (elt state (1- y)) (concat prevline line))
+          (setf state (remove-at state y))
+          (decf y)
+          (setf x (1+ (length prevline))))
+        (setf (elt state y) (remove-at (elt state y) (1- x))))
     (decf x)))
 
 (defun delete-char ()
