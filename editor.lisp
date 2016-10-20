@@ -1,8 +1,8 @@
-(defpackage #:keditor
+(defpackage #:babbymacs                 ; Yeah...
   (:use :cl :asdf :cl-charms)
   (:export main))
 
-(in-package :keditor)
+(in-package :babbymacs)
 
 ;; (ql:quickload '(:swank) :silent t)
 ;; (swank:create-server :port 4006 :dont-close t)
@@ -84,11 +84,33 @@
   "Moves the cursor forward "
   (decf (buf-cursor-y (current-buffer)) delta))
 
+(defun backspace ()
+  "Backspaces from cursor."
+  (let ((x (buf-cursor-x (current-buffer)))
+        (y (buf-cursor-y (current-buffer))))
+    (setf (elt (buf-state (current-buffer)) y)
+          (remove-if (constantly t)
+                     (buf-state (current-buffer))
+                     :start (1- x) :count 1)))
+  (incf (buf-cursor-x (current-buffer))))
+
+(defun delete-char ()
+  "Deletes character at cursor."
+  (let ((x (buf-cursor-x (current-buffer)))
+        (y (buf-cursor-y (current-buffer))))
+    (setf (elt (buf-state (current-buffer)) y)
+          (remove-if (constantly t)
+                     (buf-state (current-buffer))
+                     :start x :count 1))) )
+
 (defparameter *key-map*
   '((#\Ack . forward)
     (#\Stx . backward)
     (#\So . up)
-    (#\Dle . down)))
+    (#\Dle . down)
+    (#\Del . backspace)
+    (#\Eot . delete-char) ;; C-d
+    (#\Bs . delete-char)))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -126,18 +148,6 @@
                      (setf state (concatenate 'list l1 (list s1) (list s2) l2))
                      (incf y)
                      (setf x 0)))
-           ;; Backspace
-           ((#\Del) (destructuring-bind (s1 _ s2)
-                        (split-many (elt state y) (1- x) x)
-                      (declare (ignore _))
-                      (setf (elt state y) (concat s1 s2))
-                      (decf x)))
-           ;; C-d / delete
-           ;; TODO: refactor this string splicing into one function
-           ((#\Eot #\Bs) (destructuring-bind (s1 _ s2)
-                             (split-many (elt state y) x (1+ x))
-                           (declare (ignore _))
-                           (setf (elt state y) (concat s1 s2))))
            ;; C-x quits
            ((#\Can) (return-from driver-loop))
            ;; 32 to 126 are printable characters
@@ -152,13 +162,4 @@
            (charms:write-string-at-point charms:*standard-window*
                                          (state-to-string state) 0 0)
            (charms:move-cursor charms:*standard-window* x y))))))
-;;
-;; Yet Another Messy Amateur Text Editor
-;; YAMATE
-;;
-;; BabEmacs/Babbymacs
-;;
-;; Feed Me Parens
-;; FMP
-;;
 
