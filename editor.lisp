@@ -107,10 +107,23 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (decf x)))
 
 (defun delete-char ()
-  "Backspaces from cursor."
+  "Deletes char at cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
       (current-buffer)
     (setf (elt state y) (remove-at (elt state y) x))))
+
+(defun newline ()
+  "Inserts a newline at cursor."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer) 
+    (let* ((line (elt state y))
+           (l1 (subseq state 0 y))
+           (l2 (subseq state (1+ y)))
+           (s1 (subseq line 0 x))
+           (s2 (subseq line x)))
+      (setf state (concatenate 'list l1 (list s1) (list s2) l2))
+      (incf y)
+      (setf x 0))))
 
 (defun exit-editor (&optional force)
   "Exits the editor."
@@ -125,7 +138,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Del . backspace)
     (#\Eot . delete-char) ;; C-d
     (#\Bs . delete-char)
-    (#\Can . exit-editor)))
+    (#\Can . exit-editor)
+    (#\Lf . newline)))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -144,27 +158,17 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (loop :named driver-loop
        :while *editor-running*
        :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-       :for current := *current-buffer*
        :do
        (charms:refresh-window charms:*standard-window*)
        (with-accessors ((name buf-name) (x buf-cursor-x)
                         (y buf-cursor-y) (state buf-state))
-           current
+           (current-buffer)
          (let ((entry (assoc c *key-map*)))
            (when entry (funcall (cdr entry))))
          (case c
            ((nil) nil)
            ;; Meta
            ((#\Esc) (setf (elt state y) "Meta"))
-           ;; Return
-           ((#\Lf) (let* ((line (elt state y))
-                          (l1 (subseq state 0 y))
-                          (l2 (subseq state (1+ y)))
-                          (s1 (subseq line 0 x))
-                          (s2 (subseq line x)))
-                     (setf state (concatenate 'list l1 (list s1) (list s2) l2))
-                     (incf y)
-                     (setf x 0)))
            ;; 32 to 126 are printable characters
            (t (if (and (> (char-code c) 31) (< (char-code c) 127))
                   (destructuring-bind (s1 s2)
