@@ -76,13 +76,27 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Removes COUNT entries at position POS of SEQ."
   (remove-if (constantly t) seq :start pos :count count))
 
+;;; Beginning of editor commands
+
 (defun forward (&optional (delta 1))
   "Moves the cursor forward."
-  (incf (buf-cursor-x (current-buffer)) delta))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (incf x delta)
+    ;; wrap to next line
+    (when (> x (length (elt state y)))
+      (incf y)
+      (setf x 0))))
 
 (defun backward (&optional (delta 1))
   "Moves the cursor backward."
-  (decf (buf-cursor-x (current-buffer)) delta))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (decf x delta)
+    ;; wrap to next line
+    (when (< x 0)
+      (decf y)
+      (setf x (length (elt state y))))))
 
 (defun up (&optional (delta 1))
   "Moves the cursor up. "
@@ -130,16 +144,19 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   (if (not force) nil) ;; change this to ask the user if they're sure
   (setf *editor-running* nil))
 
+;;; End of editor commands
+
 (defparameter *key-map*
-  '((#\Ack . forward)
-    (#\Stx . backward)
-    (#\So . up)
-    (#\Dle . down)
-    (#\Del . backspace)
-    (#\Eot . delete-char) ;; C-d
-    (#\Bs . delete-char)
-    (#\Can . exit-editor)
-    (#\Lf . newline)))
+  '((#\Ack . forward)                   ; C-f
+    (#\Stx . backward)                  ; C-b
+    (#\So . up)                         ; C-p
+    (#\Dle . down)                      ; C-n
+    (#\Del . backspace)                 ; backspace
+    (#\Eot . delete-char)               ; C-d
+    (#\Bs . delete-char)                ; delete
+    (#\Can . exit-editor)               ; C-x
+    (#\Lf . newline)                    ; return
+    ))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
