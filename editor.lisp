@@ -16,12 +16,13 @@
 (defstruct (buffer (:conc-name buf-))
   (name "buffer" :type string)
   (modified nil :type boolean)
-  (state '() :type list)
+  (state (make-array 1 :element-type 'string
+                     :initial-element ""))
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer))
 
 (defparameter *editor-running* nil
-  "The editors running state.")
+  "The editor's running state.")
 
 (defparameter *current-buffer* nil)
 (defun current-buffer () *current-buffer*)
@@ -84,19 +85,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (current-buffer)
     (incf x delta)
     ;; wrap to next line
-    (when (> x (length (elt state y)))
-      (incf y)
-      (setf x 0))))
+    (cond ((> x (length (elt state y)))
+           (incf y)
+           (setf x 0))
+          ((< x 0)
+           (decf y)
+           (setf x (length (elt state y)))))))
 
 (defun backward (&optional (delta 1))
   "Moves the cursor backward."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
-      (current-buffer)
-    (decf x delta)
-    ;; wrap to next line
-    (when (< x 0)
-      (decf y)
-      (setf x (length (elt state y))))))
+  (forward (* delta -1)))
 
 (defun up (&optional (delta 1))
   "Moves the cursor up. "
