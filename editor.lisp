@@ -85,7 +85,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (current-buffer)
     (incf x delta)
     ;; wrap to next line
-    (cond ((> x (length (elt state y)))
+    (cond ((and (> x (length (elt state y))) (< y (1- (length state))))
            (incf y)
            (setf x 0))
           ((< x 0)
