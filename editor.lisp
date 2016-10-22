@@ -186,7 +186,33 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Jumps to the beginning of a line."
   (setf (buf-cursor-x (current-buffer)) 0))
 
+(defun insert-char (c)
+  "Inserts a character at the cursor position."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (destructuring-bind (s1 s2)
+        (split-at (elt state y) x)
+      (setf (elt state y) (format nil "~a~a~a" s1 c s2))
+      (forward))))
+
+(defun run-command ()
+  "Run a command."
+  (forward 2))
+
+;;; Meta handling
+
+(defparameter *meta-pressed* nil
+  "Describes if the meta key has been pressed prior.")
+
+(defun meta ()
+  "Handles presses of the meta key."
+  (setf *meta-pressed* t))
+
 ;;; End of editor commands
+
+(defparameter *meta-map*
+  '((#\x . run-command)
+    ))
 
 (defparameter *key-map*
   '((#\Ack . forward)                   ; C-f
@@ -200,11 +226,13 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Lf . newline)                    ; return
     (#\Enq . line-end)                  ; C-e
     (#\Soh . line-beginning)            ; C-a
+    (#\Esc . meta)                      ; meta key (alt/esc)
     ))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
   (setf *editor-running* t)
+  (setf *meta-pressed* nil)
   (let ((bname (or argv "buffer1"))
         (bstate (if argv
                     (file-to-list argv)
@@ -224,18 +252,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
        (with-accessors ((name buf-name) (x buf-cursor-x)
                         (y buf-cursor-y) (state buf-state))
            (current-buffer)
-         (let ((entry (assoc c *key-map*)))
-           (when entry (funcall (cdr entry))))
-         (case c
-           ((nil) nil)
-           ;; Meta
-           ((#\Esc) (setf (elt state y) "Meta"))
-           ;; 32 to 126 are printable characters
-           (t (if (and (> (char-code c) 31) (< (char-code c) 127))
-                  (destructuring-bind (s1 s2)
-                      (split-at (elt state y) x)
-                    (setf (elt state y) (format nil "~a~a~a" s1 c s2))
-                    (incf x)))))
+         (let* ((map (if *meta-pressed* *meta-map* *key-map*))
+                (entry (assoc c map)))
+           (cond ((null c) nil)
+                 ((and (> (char-code c) 31)
+                       (< (char-code c) 127)
+                       (not *meta-pressed*))
+                  (insert-char c))
+                 (entry
+                  (setf *meta-pressed* nil)
+                  (funcall (cdr entry)))))
          (multiple-value-bind (cx cy) (clamp x y state)
            (setf x cx)
            (setf y cy)
