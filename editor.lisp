@@ -10,7 +10,6 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 (swank:create-server :port 4006 :dont-close t)
 "
 
-;;
 ;; Concepts:
 ;;  * STATE - array of strings (lines), the buffer contents
 ;;  * CURSOR - x, y, constrained to the bounds of the state
@@ -29,7 +28,8 @@ Easy REPL setup - why doesn't paredit like #| |# ?
   (modified nil :type boolean)
   (state (make-array 1 :element-type 'string :initial-element ""))
   (cursor-x 0 :type integer)
-  (cursor-y 0 :type integer))
+  (cursor-y 0 :type integer)
+  (furthest-x 0 :type integer))
 
 (defparameter *editor-running* nil
   "The editor's running state.")
@@ -92,7 +92,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 (defun forward (&optional (delta 1))
   "Moves the cursor forward."
   (labels ((forward-1 (del)
-             (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+             (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                              (state buf-state) (fx buf-furthest-x))
                  (current-buffer)
                (incf x del)
                (cond ((and (> x (length (elt state y)))
@@ -103,26 +104,30 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                      ((and (< x 0) (> y 0))
                       ;; wrap to the previous line if we're not on the first
                       (decf y)
-                      (setf x (length (elt state y))))))))
+                      (setf x (length (elt state y)))))
+               (setf fx x))))
     ;; get the sign of delta, loop for |delta| and multiply by sign
     ;; allows us to move backward without separate handling of neg delta
     (let ((sign (signum delta)))
       (dotimes (v (abs delta))
-        (forward-1 (* v sign))))))
+        (forward-1 (* 1 sign))))))
 
 (defun backward (&optional (delta 1))
   "Moves the cursor backward."
   (forward (* delta -1)))
 
-;; TODO: remember the furthest column and jump to it if we go up/down
-
 (defun up (&optional (delta 1))
-  "Moves the cursor up. "
-  (incf (buf-cursor-y (current-buffer)) delta))
+  "Moves the cursor up."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                   (state buf-state) (fx buf-furthest-x))
+      (current-buffer)
+    (incf y delta)
+    ;; handle furthest column
+    (setf x (min fx (length (elt state y))))))
 
 (defun down (&optional (delta 1))
   "Moves the cursor down."
-  (decf (buf-cursor-y (current-buffer)) delta))
+  (up (* delta -1)))
 
 (defun backspace ()
   "Backspaces from cursor."
