@@ -4,20 +4,30 @@
 
 (in-package :babbymacs)
 
-;; (ql:quickload '(:swank) :silent t)
-;; (swank:create-server :port 4006 :dont-close t)
+"
+Easy REPL setup - why doesn't paredit like #| |# ?
+(ql:quickload '(:swank :cl-charms) :silent t)
+(swank:create-server :port 4006 :dont-close t)
+"
+
 ;;
 ;; Concepts:
-;;  STATE - list of lines, the buffer contents
-;;  CURSOR - x, y, constrained to the bounds of the state
+;;  * STATE - array of strings (lines), the buffer contents
+;;  * CURSOR - x, y, constrained to the bounds of the state
 ;;           cursor is moved for standard editing commands
-;;
+;; 
+;; TODO:
+;;  * Multiple ncurses windows: buffer (with scrolling), modeline
+;;  * Handle meta key properly, with more complex keymaps
+;;  * Potentially implement major/minors? I want to have modes for editing, but
+;;    also for general stuff like no-input, unbounded cursor movement, etc.
+;;  * Primitive CL mode with a SWANK client!
+;;  * Colours!
 
 (defstruct (buffer (:conc-name buf-))
   (name "buffer" :type string)
   (modified nil :type boolean)
-  (state (make-array 1 :element-type 'string
-                     :initial-element ""))
+  (state (make-array 1 :element-type 'string :initial-element ""))
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer))
 
@@ -81,20 +91,30 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun forward (&optional (delta 1))
   "Moves the cursor forward."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
-      (current-buffer)
-    (incf x delta)
-    ;; wrap to next line
-    (cond ((and (> x (length (elt state y))) (< y (1- (length state))))
-           (incf y)
-           (setf x 0))
-          ((< x 0)
-           (decf y)
-           (setf x (length (elt state y)))))))
+  (labels ((forward-1 (del)
+             (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+                 (current-buffer)
+               (incf x del)
+               (cond ((and (> x (length (elt state y)))
+                           (< y (1- (length state))))
+                      ;; wrap to next line if we aren't on the last one
+                      (incf y)
+                      (setf x 0))
+                     ((and (< x 0) (> y 0))
+                      ;; wrap to the previous line if we're not on the first
+                      (decf y)
+                      (setf x (length (elt state y))))))))
+    ;; get the sign of delta, loop for |delta| and multiply by sign
+    ;; allows us to move backward without separate handling of neg delta
+    (let ((sign (signum delta)))
+      (dotimes (v (abs delta))
+        (forward-1 (* v sign))))))
 
 (defun backward (&optional (delta 1))
   "Moves the cursor backward."
   (forward (* delta -1)))
+
+;; TODO: remember the furthest column and jump to it if we go up/down
 
 (defun up (&optional (delta 1))
   "Moves the cursor up. "
