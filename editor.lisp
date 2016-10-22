@@ -176,6 +176,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   (if (not force) nil) ;; change this to ask the user if they're sure
   (setf *editor-running* nil))
 
+(defun line-end ()
+  "Jumps to the end of a line."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (setf x (length (elt state y)))))
+
+(defun line-beginning ()
+  "Jumps to the beginning of a line."
+  (setf (buf-cursor-x (current-buffer)) 0))
+
 ;;; End of editor commands
 
 (defparameter *key-map*
@@ -188,6 +198,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Bs . delete-char)                ; delete
     (#\Can . exit-editor)               ; C-x
     (#\Lf . newline)                    ; return
+    (#\Enq . line-end)                  ; C-e
+    (#\Soh . line-beginning)            ; C-a
     ))
 
 (defun main (&optional argv)
