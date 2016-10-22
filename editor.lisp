@@ -18,10 +18,13 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 ;; TODO:
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline
 ;;  * Handle meta key properly, with more complex keymaps
+;;     - Currently we can handle C-, M- and C-M- prefixes.
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
 ;;    also for general stuff like no-input, unbounded cursor movement, etc.
 ;;  * Primitive CL mode with a SWANK client!
 ;;  * Colours!
+;;
+;;
 
 (defstruct (buffer (:conc-name buf-))
   (name "buffer" :type string)
@@ -57,14 +60,6 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 key argument NEWLINE specifying if an additional newline is added to the end."
   (concat (format nil "~{~a~^~%~}" state) (and newline (string #\nl))))
 
-(defun clamp (x y state)
-  "Clamp the cursor with position X Y to the bounds of the editor state STATE."
-  (if (< x 0) (setf x 0))
-  (if (< y 0) (setf y 0))
-  (if (> y (1- (length state))) (setf y (1- (length state))))
-  (if (> x (length (elt state y))) (setf x (length (elt state y))))
-  (values x y))
-
 ;; split a sequence SEQ at POS
 (defun split-at (seq pos)
   "Split a sequence SEQ at position POS."
@@ -95,7 +90,11 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
                               (state buf-state) (fx buf-furthest-x))
                  (current-buffer)
-               (incf x del)
+               (unless (or (and (= x 0) (= y 0) (> 0 del))
+                           (and (= x (length (elt state y)))
+                                (= y (1- (length state)))
+                                (< 0 del)))
+                (incf x del))
                (cond ((and (> x (length (elt state y)))
                            (< y (1- (length state))))
                       ;; wrap to next line if we aren't on the last one
@@ -150,7 +149,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
           (decf y)
           (setf x (1+ (length prevline))))
         (setf (elt state y) (remove-at (elt state y) (1- x))))
-    (decf x)))
+    (backward)))
 
 (defun delete-char ()
   "Deletes char at cursor."
@@ -178,13 +177,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun line-end ()
   "Jumps to the end of a line."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                   (state buf-state) (fx buf-furthest-x))
       (current-buffer)
-    (setf x (length (elt state y)))))
+    (setf x (length (elt state y))
+          fx x)))
 
 (defun line-beginning ()
   "Jumps to the beginning of a line."
-  (setf (buf-cursor-x (current-buffer)) 0))
+  (setf (buf-cursor-x (current-buffer)) 0
+        (buf-furthest-x (current-buffer)) 0))
 
 (defun insert-char (c)
   "Inserts a character at the cursor position."
@@ -231,8 +233,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
+  ;; override global state that may already be setn
   (setf *editor-running* t)
   (setf *meta-pressed* nil)
+  ;; if argv is set, open that file, else create an empty buffer
   (let ((bname (or argv "buffer1"))
         (bstate (if argv
                     (file-to-list argv)
@@ -252,20 +256,22 @@ key argument NEWLINE specifying if an additional newline is added to the end."
        (with-accessors ((name buf-name) (x buf-cursor-x)
                         (y buf-cursor-y) (state buf-state))
            (current-buffer)
+         ;; if we previously pressed the meta key, resolve commands from the meta
+         ;; map, otherwise use the standard root key map
          (let* ((map (if *meta-pressed* *meta-map* *key-map*))
                 (entry (assoc c map)))
-           (cond ((null c) nil)
+           (cond ((null c) nil)         ; ignore nils
+                 ;; 32->126 are printable, so print c if it's not a part of a
+                 ;; meta command
                  ((and (> (char-code c) 31)
                        (< (char-code c) 127)
                        (not *meta-pressed*))
                   (insert-char c))
+                 ;; if the entry for the keymap has resolved to something, run it
                  (entry
                   (setf *meta-pressed* nil)
                   (funcall (cdr entry)))))
-         (multiple-value-bind (cx cy) (clamp x y state)
-           (setf x cx)
-           (setf y cy)
-           (charms:write-string-at-point charms:*standard-window*
-                                         (state-to-string state :newline t) 0 0) 
-           (charms:move-cursor charms:*standard-window* x y))))))
+         (charms:write-string-at-point charms:*standard-window*
+                                       (state-to-string state :newline t) 0 0) 
+         (charms:move-cursor charms:*standard-window* x y)))))
 
