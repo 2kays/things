@@ -118,20 +118,25 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 ;; TODO: bounds checks on y = 0 / y = length state
 ;; TODO: handle delta correctly
-(defun up (&optional (delta 1))
-  "Moves the cursor up."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
-                   (state buf-state) (fx buf-furthest-x))
-      (current-buffer)
-    (when (or (and (< delta 0) (> y 0))
-              (and (> delta 0) (< y (1- (length state)))))
-        ;; handle furthest column
-        (incf y delta)
-        (setf x (min fx (length (elt state y)))))))
-
 (defun down (&optional (delta 1))
   "Moves the cursor down."
-  (up (* delta -1)))
+  (labels ((down-1 (del)
+             (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                              (state buf-state) (fx buf-furthest-x))
+                 (current-buffer)
+               ;; bounds checking: first clause is up, second is down
+               (when (or (and (< del 0) (> y 0))
+                         (and (> del 0) (< y (1- (length state)))))
+                 (incf y del)
+                 ;; handle furthest column
+                 (setf x (min fx (length (elt state y))))))))
+    (let ((sign (signum delta)))
+      (dotimes (v (abs delta))
+        (down-1 (* 1 sign))))))
+
+(defun up (&optional (delta 1))
+  "Moves the cursor up."
+  (down (* delta -1)))
 
 (defun backspace ()
   "Backspaces from cursor."
@@ -176,8 +181,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 (defparameter *key-map*
   '((#\Ack . forward)                   ; C-f
     (#\Stx . backward)                  ; C-b
-    (#\So . up)                         ; C-p
-    (#\Dle . down)                      ; C-n
+    (#\So . down)                       ; C-n
+    (#\Dle . up)                        ; C-p
     (#\Del . backspace)                 ; backspace
     (#\Eot . delete-char)               ; C-d
     (#\Bs . delete-char)                ; delete
