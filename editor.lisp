@@ -116,14 +116,18 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Moves the cursor backward."
   (forward (* delta -1)))
 
+;; TODO: bounds checks on y = 0 / y = length state
+;; TODO: handle delta correctly
 (defun up (&optional (delta 1))
   "Moves the cursor up."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
                    (state buf-state) (fx buf-furthest-x))
       (current-buffer)
-    (incf y delta)
-    ;; handle furthest column
-    (setf x (min fx (length (elt state y))))))
+    (when (or (and (< delta 0) (> y 0))
+              (and (> delta 0) (< y (1- (length state)))))
+        ;; handle furthest column
+        (incf y delta)
+        (setf x (min fx (length (elt state y)))))))
 
 (defun down (&optional (delta 1))
   "Moves the cursor down."
