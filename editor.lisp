@@ -14,7 +14,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * STATE - array of strings (lines), the buffer contents
 ;;  * CURSOR - x, y, constrained to the bounds of the state
 ;;           cursor is moved for standard editing commands
-;; 
+;;
 ;; TODO:
 ;;  * Unit tests!!!
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline
@@ -57,7 +57,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
       str)))
 
 (defun state-to-string (state &key newline)
-  "Reduce editor state by flattening STATE to a string with newlines, with the 
+  "Reduce editor state by flattening STATE to a string with newlines, with the
 key argument NEWLINE specifying if an additional newline is added to the end."
   (concat (format nil "~{~a~^~%~}" state) (and newline (string #\nl))))
 
@@ -161,7 +161,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 (defun newline ()
   "Inserts a newline at cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
-      (current-buffer) 
+      (current-buffer)
     (let* ((line (elt state y))
            (l1 (subseq state 0 y))
            (l2 (subseq state (1+ y)))
@@ -217,7 +217,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defparameter *meta-map*
   '((#\x . run-command)
-    (#\p . scroll-up)))
+    (#\p . scroll-up)
+    ))
 
 (defparameter *key-map*
   '((#\Ack . forward)                   ; C-f
@@ -236,35 +237,52 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun main2 (&optional argv)
   (charms:with-curses ()
-    (charms:clear-window charms:*standard-window* :force-repaint t)
+    ;;(charms/ll:start-color)
     (charms:disable-echoing)
     (charms:enable-raw-input :interpret-control-characters t)
-    (charms:enable-non-blocking-mode charms:*standard-window*)
-    (let* ((pad (charms/ll:newpad 300 150)))
-      (charms/ll:mvwaddstr pad 0 0 (file-to-string argv))
-      (loop :named driver
-         :with x := 0
-         :with y := 0
-         :with height := 0
-         :with width := 0
-         :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-                                        ;         :for wptr := (charms/ll:subpad pad 20 20 x y)
-         :do
-         (charms/ll:getmaxyx charms/ll:*stdscr* width height)
-         (charms/ll:prefresh pad y x 0 0 (1- width) (- height 2))
-         (charms:refresh-window charms:*standard-window*)
-         (case c
-           ((nil) nil)
-           ((#\q) (return-from driver))
-           ((#\n) (incf y))
-           ((#\p) (decf y)))
-         
-         (when nil (charms/ll:wborder pad
-                                      (char-int #\|) (char-int #\|)
-                                      (char-int #\-) (char-int #\-)
-                                      (char-int #\+) (char-int #\+)
-                                      (char-int #\+) (char-int #\+)))
-         ))))
+    ;; (charms:enable-non-blocking-mode charms:*standard-window*)
+    ;;(charms/ll:init-pair 1 charms/ll:color_white charms/ll:color_black)
+    ;; (charms/ll:init-pair 2 charms/ll:color_black charms/ll:color_white)
+    (let ((height 0)
+          (width 0)
+          (bufname "code.lisp"))
+      (charms/ll:getmaxyx charms/ll:*stdscr* height width)
+      (let ((pad (charms/ll:newpad 300 150))
+            (mlwin (charms/ll:newwin 1 (1- width) (1- height) 0)))
+        (charms/ll:nodelay pad charms/ll:true)
+        
+        (charms/ll:wclear pad)
+        (charms/ll:werase pad)
+        (charms/ll:wclear mlwin)
+        (charms/ll:werase mlwin)
+        
+        (loop :named driver
+           :with x := 0
+           :with y := 0
+           :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+           ;; :for wptr := (charms/ll:subpad pad 20 20 x y)
+           :do
+           (charms/ll:getmaxyx charms/ll:*stdscr* height width)
+           (charms/ll:mvwaddstr mlwin 0 (- width (length bufname) 1) bufname)
+           ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+           (charms/ll:wrefresh mlwin)
+           (charms/ll:mvwaddstr pad 0 0 (file-to-string argv))
+           ;; (charms/ll:wborder pad                                       
+           ;; (char-int #\|) (char-int #\|)
+           ;; (char-int #\-) (char-int #\-)
+           ;; (char-int #\+) (char-int #\+)
+           ;; (char-int #\+) (char-int #\+))
+           
+           (charms/ll:prefresh pad y x 0 0 (- height 2) (- width 1))
+           
+           ;; (charms:refresh-window charms:*standard-window*)
+
+           (case c
+             ((nil) nil)
+             ((#\q) (return-from driver))
+             ((#\n) (incf y))
+             ((#\p) (decf y)))
+           )))))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -279,8 +297,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (setf *current-buffer*
           (make-buffer :name bname :state bstate)))
   (charms:with-curses ()
-    (charms/ll:scrollok (charms::window-pointer charms:*standard-window*) 1)
-    ;;(charms/ll:idlok (charms::window-pointer charms:*standard-window*) 1)
+    ;; (charms/ll:scrollok (charms::window-pointer charms:*standard-window*) 1)
+    ;; (charms/ll:idlok (charms::window-pointer charms:*standard-window*) 1)
     (charms:clear-window charms:*standard-window* :force-repaint t)
     (charms:disable-echoing)
     (charms:enable-raw-input :interpret-control-characters t)
@@ -311,7 +329,6 @@ key argument NEWLINE specifying if an additional newline is added to the end."
          ;; (charms:write-string-at-point charms:*standard-window* (state-to-string state :newline t) 0 0)
          (charms/ll:mvwaddstr (charms::window-pointer charms:*standard-window*)
                               x y (state-to-string state :newline t))
-         
-         
-         (charms:move-cursor charms:*standard-window* x y)))))
 
+
+         (charms:move-cursor charms:*standard-window* x y)))))
