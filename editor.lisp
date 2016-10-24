@@ -297,38 +297,48 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (setf *current-buffer*
           (make-buffer :name bname :state bstate)))
   (charms:with-curses ()
-    ;; (charms/ll:scrollok (charms::window-pointer charms:*standard-window*) 1)
-    ;; (charms/ll:idlok (charms::window-pointer charms:*standard-window*) 1)
-    (charms:clear-window charms:*standard-window* :force-repaint t)
-    (charms:disable-echoing)
-    (charms:enable-raw-input :interpret-control-characters t)
-    (charms:enable-non-blocking-mode charms:*standard-window*)
-    (loop :named driver-loop
-       :while *editor-running*
-       :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-       :do
-       (charms:refresh-window charms:*standard-window*)
-       (with-accessors ((name buf-name) (x buf-cursor-x)
-                        (y buf-cursor-y) (state buf-state))
-           (current-buffer)
-         ;; if we previously pressed the meta key, resolve commands from the
-         ;; meta map, otherwise use the standard root key map
-         (let* ((map (if *meta-pressed* *meta-map* *key-map*))
-                (entry (assoc c map)))
-           (cond ((null c) nil)         ; ignore nils
-                 ;; 32->126 are printable, so print c if it's not a part of a
-                 ;; meta command
-                 ((and (> (char-code c) 31)
-                       (< (char-code c) 127)
-                       (not *meta-pressed*))
-                  (insert-char c))
-                 ;; if the entry for the keymap has resolved to something, run it
-                 (entry
-                  (setf *meta-pressed* nil)
-                  (funcall (cdr entry)))))
-         ;; (charms:write-string-at-point charms:*standard-window* (state-to-string state :newline t) 0 0)
-         (charms/ll:mvwaddstr (charms::window-pointer charms:*standard-window*)
-                              x y (state-to-string state :newline t))
-
-
-         (charms:move-cursor charms:*standard-window* x y)))))
+    (let ((theight 0)
+          (twidth 0))
+      ;; Set initial terminal size
+      (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+      ;; Build the pad according to the file state
+      ;; TODO: programmatically determine column max (150 is reasonable for now)
+      (let ((pad (charms/ll:newpad (length (buf-state (current-buffer))) 150)))
+        ;; Set up terminal behaviour
+        (charms:clear-window charms:*standard-window* :force-repaint t)
+        (charms:disable-echoing)
+        (charms:enable-raw-input :interpret-control-characters t)
+        (charms:enable-non-blocking-mode charms:*standard-window*)
+        (loop :named driver-loop
+           :while *editor-running*
+           :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+           :do
+           ;; Update terminal height and width
+           (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+           (with-accessors ((name buf-name) (x buf-cursor-x)
+                            (y buf-cursor-y) (state buf-state))
+               (current-buffer)
+             ;; if we previously pressed the meta key, resolve commands from the
+             ;; meta map, otherwise use the standard root key map
+             (let* ((map (if *meta-pressed* *meta-map* *key-map*))
+                    (entry (assoc c map)))
+               (cond ((null c) nil)     ; ignore nils
+                     ;; 32->126 are printable, so print c if it's not a part of
+                     ;; a meta command
+                     ((and (> (char-code c) 31)
+                           (< (char-code c) 127)
+                           (not *meta-pressed*))
+                      (insert-char c))
+                     ;; if the entry for the keymap has resolved to something
+                     ;; run it
+                     (entry (setf *meta-pressed* nil)
+                            (funcall (cdr entry)))))
+             ;; write the updated file state to the pad and display it at the
+             ;; relevant y level
+             ;; TODO: fix this to stick to the proper row
+             (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
+             (charms/ll:wmove pad y x)
+             (charms/ll:prefresh pad y 0 0 0 (- theight 2) (- twidth 1))
+             ;;(charms:move-cursor charms:*standard-window* x y)
+             ;; (charms:refresh-window charms:*standard-window*)
+             ))))))
