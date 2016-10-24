@@ -1,11 +1,11 @@
-(defpackage #:babbymacs                 ; Yeah...
+(defpackage #:babbymacs
   (:use :cl :asdf :cl-charms)
   (:export main))
 
 (in-package :babbymacs)
 
 "
-Easy REPL setup - why doesn't paredit like #| |# ?
+Easy REPL setup - why dpoesn't paredit like #| |# ?
 (ql:quickload '(:swank :cl-charms) :silent t)
 (swank:create-server :port 4006 :dont-close t)
 "
@@ -16,6 +16,7 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 ;;           cursor is moved for standard editing commands
 ;; 
 ;; TODO:
+;;  * Unit tests!!!
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline
 ;;  * Handle meta key properly, with more complex keymaps
 ;;     - Currently we can handle C-, M- and C-M- prefixes.
@@ -23,7 +24,7 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 ;;    also for general stuff like no-input, unbounded cursor movement, etc.
 ;;  * Primitive CL mode with a SWANK client!
 ;;  * Colours!
-;;
+;;  * Convert to CLOS? Modes might be a lot easier
 ;;
 
 (defstruct (buffer (:conc-name buf-))
@@ -90,6 +91,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
                               (state buf-state) (fx buf-furthest-x))
                  (current-buffer)
+               ;; don't go further back if we're at the start
+               ;; ...or further forward if we're at the end
                (unless (or (and (= x 0) (= y 0) (> 0 del))
                            (and (= x (length (elt state y)))
                                 (= y (1- (length state)))
@@ -115,8 +118,6 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Moves the cursor backward."
   (forward (* delta -1)))
 
-;; TODO: bounds checks on y = 0 / y = length state
-;; TODO: handle delta correctly
 (defun down (&optional (delta 1))
   "Moves the cursor down."
   (labels ((down-1 (del)
@@ -210,11 +211,13 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Handles presses of the meta key."
   (setf *meta-pressed* t))
 
+(defun scroll-up ()
+  (charms/ll:wscrl (charms::window-pointer charms:*standard-window*) -1))
 ;;; End of editor commands
 
 (defparameter *meta-map*
   '((#\x . run-command)
-    ))
+    (#\p . scroll-up)))
 
 (defparameter *key-map*
   '((#\Ack . forward)                   ; C-f
@@ -231,6 +234,35 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Esc . meta)                      ; meta key (alt/esc)
     ))
 
+(defun main2 (&optional argv)
+  (charms:with-curses ()
+    (charms:clear-window charms:*standard-window* :force-repaint t)
+    (charms:disable-echoing)
+    (charms:enable-raw-input :interpret-control-characters t)
+    (charms:enable-non-blocking-mode charms:*standard-window*)
+    (let* ((pad (charms/ll:newpad 300 150)))
+      (charms/ll:mvwaddstr pad 0 0 (file-to-string argv))
+      (loop :named driver
+         :with x := 0
+         :with y := 0
+         :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+;         :for wptr := (charms/ll:subpad pad 20 20 x y)
+         :do
+         (charms/ll:prefresh pad y x 0 0 50 50)
+         (charms:refresh-window charms:*standard-window*)
+         (case c
+           ((nil) nil)
+           ((#\q) (return-from driver))
+           ((#\n) (incf y))
+           ((#\p) (decf y)))
+         
+         (when nil (charms/ll:wborder pad
+                             (char-int #\|) (char-int #\|)
+                             (char-int #\-) (char-int #\-)
+                             (char-int #\+) (char-int #\+)
+                             (char-int #\+) (char-int #\+)))
+         ))))
+
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; override global state that may already be setn
@@ -244,6 +276,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (setf *current-buffer*
           (make-buffer :name bname :state bstate)))
   (charms:with-curses ()
+    (charms/ll:scrollok (charms::window-pointer charms:*standard-window*) 1)
+    ;;(charms/ll:idlok (charms::window-pointer charms:*standard-window*) 1)
     (charms:clear-window charms:*standard-window* :force-repaint t)
     (charms:disable-echoing)
     (charms:enable-raw-input :interpret-control-characters t)
@@ -256,8 +290,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
        (with-accessors ((name buf-name) (x buf-cursor-x)
                         (y buf-cursor-y) (state buf-state))
            (current-buffer)
-         ;; if we previously pressed the meta key, resolve commands from the meta
-         ;; map, otherwise use the standard root key map
+         ;; if we previously pressed the meta key, resolve commands from the
+         ;; meta map, otherwise use the standard root key map
          (let* ((map (if *meta-pressed* *meta-map* *key-map*))
                 (entry (assoc c map)))
            (cond ((null c) nil)         ; ignore nils
@@ -271,7 +305,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                  (entry
                   (setf *meta-pressed* nil)
                   (funcall (cdr entry)))))
-         (charms:write-string-at-point charms:*standard-window*
-                                       (state-to-string state :newline t) 0 0) 
+         ;; (charms:write-string-at-point charms:*standard-window* (state-to-string state :newline t) 0 0)
+         (charms/ll:mvwaddstr (charms::window-pointer charms:*standard-window*)
+                              x y (state-to-string state :newline t))
+         
+         
          (charms:move-cursor charms:*standard-window* x y)))))
 
