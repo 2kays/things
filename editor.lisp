@@ -245,10 +245,13 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (loop :named driver
          :with x := 0
          :with y := 0
+         :with height := 0
+         :with width := 0
          :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-;         :for wptr := (charms/ll:subpad pad 20 20 x y)
+                                        ;         :for wptr := (charms/ll:subpad pad 20 20 x y)
          :do
-         (charms/ll:prefresh pad y x 0 0 50 50)
+         (charms/ll:getmaxyx charms/ll:*stdscr* width height)
+         (charms/ll:prefresh pad y x 0 0 (1- width) (- height 2))
          (charms:refresh-window charms:*standard-window*)
          (case c
            ((nil) nil)
@@ -257,10 +260,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
            ((#\p) (decf y)))
          
          (when nil (charms/ll:wborder pad
-                             (char-int #\|) (char-int #\|)
-                             (char-int #\-) (char-int #\-)
-                             (char-int #\+) (char-int #\+)
-                             (char-int #\+) (char-int #\+)))
+                                      (char-int #\|) (char-int #\|)
+                                      (char-int #\-) (char-int #\-)
+                                      (char-int #\+) (char-int #\+)
+                                      (char-int #\+) (char-int #\+)))
          ))))
 
 (defun main (&optional argv)
