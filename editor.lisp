@@ -338,7 +338,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              ;; TODO: fix this to stick to the proper row
              (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
              (charms/ll:wmove pad y x)
-             (charms/ll:prefresh pad y 0 0 0 (- theight 2) (- twidth 1))
+             (charms/ll:prefresh pad (* theight (floor (/ y (1- theight)))) 0 0 0
+                                 (- theight 2) (- twidth 1))
              ;;(charms:move-cursor charms:*standard-window* x y)
              ;; (charms:refresh-window charms:*standard-window*)
              ))))))
