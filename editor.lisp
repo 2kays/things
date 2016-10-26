@@ -254,8 +254,15 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
       ;; Build the pad according to the file state
       ;; TODO: programmatically determine column max (150 is reasonable for now)
-      (let ((pad (charms/ll:newpad (length (buf-state (current-buffer))) 150))
-            (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
+      ;; EXPLANATION FOR FUTURE ME
+      ;; Say we have theight of 50, file is 70 lines. We want to allocate the
+      ;; pad to be a multiple of theight that is enough to accomodate the lines.
+      ;; So we take `ceil(theight / lines)`, which gives us that multiple.
+      ;; We multiply theight by that for the pad height.
+      ;; TODO: dynamically react to terminal height changes when allocating pad
+      (let* ((page-cnt (ceiling (length (buf-state (current-buffer))) theight))
+             (pad (charms/ll:newpad (* theight page-cnt) 150))
+             (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
         ;; Set up terminal behaviour
 ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
   
@@ -290,7 +297,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let ((mlsize 1)
-                   (mstr (format nil "(~a,~a) ~a" x y name)))
+                   (mstr (format nil "~a% (~a,~a) ~a "
+                                 (truncate (* 100 (/ y (length state))))
+                                 x y name)))
+               (charms/ll:werase mlwin)
                (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
