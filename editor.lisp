@@ -235,55 +235,6 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Esc . meta)                      ; meta key (alt/esc)
     ))
 
-(defun main2 (&optional argv)
-  (charms:with-curses ()
-    ;;(charms/ll:start-color)
-    (charms:disable-echoing)
-    (charms:enable-raw-input :interpret-control-characters t)
-    ;; (charms:enable-non-blocking-mode charms:*standard-window*)
-    ;;(charms/ll:init-pair 1 charms/ll:color_white charms/ll:color_black)
-    ;; (charms/ll:init-pair 2 charms/ll:color_black charms/ll:color_white)
-    (let ((height 0)
-          (width 0)
-          (bufname "code.lisp"))
-      (charms/ll:getmaxyx charms/ll:*stdscr* height width)
-      (let ((pad (charms/ll:newpad 300 150))
-            (mlwin (charms/ll:newwin 1 (1- width) (1- height) 0)))
-        (charms/ll:nodelay pad charms/ll:true)
-        
-        (charms/ll:wclear pad)
-        (charms/ll:werase pad)
-        (charms/ll:wclear mlwin)
-        (charms/ll:werase mlwin)
-        
-        (loop :named driver
-           :with x := 0
-           :with y := 0
-           :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-           ;; :for wptr := (charms/ll:subpad pad 20 20 x y)
-           :do
-           (charms/ll:getmaxyx charms/ll:*stdscr* height width)
-           (charms/ll:mvwaddstr mlwin 0 (- width (length bufname) 1) bufname)
-           ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
-           (charms/ll:wrefresh mlwin)
-           (charms/ll:mvwaddstr pad 0 0 (file-to-string argv))
-           ;; (charms/ll:wborder pad                                       
-           ;; (char-int #\|) (char-int #\|)
-           ;; (char-int #\-) (char-int #\-)
-           ;; (char-int #\+) (char-int #\+)
-           ;; (char-int #\+) (char-int #\+))
-           
-           (charms/ll:prefresh pad y x 0 0 (- height 2) (- width 1))
-           
-           ;; (charms:refresh-window charms:*standard-window*)
-
-           (case c
-             ((nil) nil)
-             ((#\q) (return-from driver))
-             ((#\n) (incf y))
-             ((#\p) (decf y)))
-           )))))
-
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; override global state that may already be setn
@@ -303,9 +254,11 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
       ;; Build the pad according to the file state
       ;; TODO: programmatically determine column max (150 is reasonable for now)
-      (let ((pad (charms/ll:newpad (length (buf-state (current-buffer))) 150)))
+      (let ((pad (charms/ll:newpad (length (buf-state (current-buffer))) 150))
+            (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
         ;; Set up terminal behaviour
-        (charms:clear-window charms:*standard-window* :force-repaint t)
+;;        (charms:clear-window charms:*standard-window* :force-repaint t)
+  
         (charms:disable-echoing)
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
@@ -315,6 +268,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
            :do
            ;; Update terminal height and width
            (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+
            (with-accessors ((name buf-name) (x buf-cursor-x)
                             (y buf-cursor-y) (state buf-state))
                (current-buffer)
@@ -335,11 +289,17 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                             (funcall (cdr entry)))))
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
-             (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
-             (charms/ll:wmove pad y x)
-             (let ((mlsize 1))
-               (charms/ll:prefresh pad (* (- theight mlsize) (floor (/ y (- theight mlsize)))) 0 0 0
-                                   (- theight 1 mlsize) (- twidth 1)))
+             (let ((mlsize 1)
+                   (mstr (format nil "(~a,~a) ~a" x y name)))
+               (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
+               ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+               (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
+               (charms/ll:wmove pad y x)
+               (charms/ll:wnoutrefresh mlwin)
+               (charms/ll:pnoutrefresh pad (* (- theight mlsize) (floor (/ y (- theight mlsize)))) 0 0 0
+                                       (- theight 1 mlsize) (- twidth 1))
+               (charms/ll:doupdate))
+             
              ;;(charms:move-cursor charms:*standard-window* x y)
-             ;; (charms:refresh-window charms:*standard-window*)
+             ;;(charms:refresh-window charms:*standard-window*)
              ))))))
