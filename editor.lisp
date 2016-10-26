@@ -211,13 +211,10 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Handles presses of the meta key."
   (setf *meta-pressed* t))
 
-(defun scroll-up ()
-  (charms/ll:wscrl (charms::window-pointer charms:*standard-window*) -1))
 ;;; End of editor commands
 
 (defparameter *meta-map*
   '((#\x . run-command)
-    (#\p . scroll-up)
     ))
 
 (defparameter *key-map*
