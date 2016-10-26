@@ -38,6 +38,9 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 (defparameter *editor-running* nil
   "The editor's running state.")
 
+(defparameter *modeline-height* 1
+  "The height of the mode line.")
+
 (defparameter *current-buffer* nil)
 (defun current-buffer () *current-buffer*)
 
@@ -261,7 +264,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              (pad (charms/ll:newpad (* theight page-cnt) 150))
              (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
         ;; Set up terminal behaviour
-;;        (charms:clear-window charms:*standard-window* :force-repaint t)
+        ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
   
         (charms:disable-echoing)
         (charms:enable-raw-input :interpret-control-characters t)
@@ -293,18 +296,22 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                             (funcall (cdr entry)))))
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
-             (let ((mlsize 1)
-                   (mstr (format nil "~a% (~a,~a) ~a "
-                                 (truncate (* 100 (/ y (length state))))
-                                 x y name)))
-               (charms/ll:werase mlwin)
-               (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
+             (let* ((mlh *modeline-height*)
+                    (winh (- theight mlh))
+                    (mstr (format nil "~a% (~a,~a) ~a "
+                                  (truncate (* 100 (/ y (length state))))
+                                  x y name)))
+               (when (not (zerop mlh))
+                 (charms/ll:werase mlwin)
+                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+               (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                (charms/ll:wmove pad y x)
+               
                (charms/ll:wnoutrefresh mlwin)
-               (charms/ll:pnoutrefresh pad (* (- theight mlsize) (floor (/ y (- theight mlsize)))) 0 0 0
-                                       (- theight 1 mlsize) (- twidth 1))
+               (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
+                                       (1- winh) (- twidth 1))
                (charms/ll:doupdate))
              
              ;;(charms:move-cursor charms:*standard-window* x y)
