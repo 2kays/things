@@ -18,6 +18,9 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;; TODO:
 ;;  * Unit tests!!!
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline
+;;     - Modeline should be have color option
+;;     - Command to shrink/enlarge modeline, with separate parts
+;;     - External formatting of the modeline
 ;;  * Handle meta key properly, with more complex keymaps
 ;;     - Currently we can handle C-, M- and C-M- prefixes.
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
@@ -45,15 +48,23 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 (defun current-buffer () *current-buffer*)
 
 (defun concat (&rest args)
+  "Concatenates ARGS to a string."
   (apply #'concatenate 'string args))
 
+(defun stream-to-list (stream)
+  "Returns a string stream STREAM to a list, handling empty lines followed by
+EOF properly."
+  (loop :for (l s) := (multiple-value-list (read-line stream nil))
+     :collect (if s (or l "") l)
+     :until s))
+
 (defun file-to-list (path)
+  "Returns a list of lines of the file at PATH."
   (with-open-file (f path)
-    (loop :for l := (read-line f nil)
-       :while l
-       :collect l)))
+    (stream-to-list f)))
 
 (defun file-to-string (path)
+  "Dumps file at PATH to a string and returns it."
   (with-open-file (f path)
     (let ((str (make-string (file-length f))))
       (read-sequence str f)
@@ -240,6 +251,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   ;; override global state that may already be setn
   (setf *editor-running* t)
   (setf *meta-pressed* nil)
+  (setf *modeline-height* 1)
   ;; if argv is set, open that file, else create an empty buffer
   (let ((bname (or argv "buffer1"))
         (bstate (if argv
