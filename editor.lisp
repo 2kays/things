@@ -202,8 +202,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (current-buffer)
     (destructuring-bind (s1 s2) (split-at (elt state y) x)
       (setf (elt state y) s1)
-      (incf y)
-      (setf x 0)
+      (down)
+      (line-beginning)
       (insert-into-array state s2 y))))
 
 (defun exit-editor (&optional force)
@@ -332,7 +332,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              (let* ((mlh *modeline-height*)
                     (winh (- theight mlh))
                     (mstr (format nil "~a% (~a,~a) ~a "
-                                  (truncate (* 100 (/ y (length state))))
+                                  (truncate (* 100 (/ y (1- (length state)))))
                                   x y name)))
                (when (not (zerop mlh))
                  (charms/ll:werase mlwin)
