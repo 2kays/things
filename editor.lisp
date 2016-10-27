@@ -28,6 +28,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * Primitive CL mode with a SWANK client!
 ;;  * Colours!
 ;;  * Convert to CLOS? Modes might be a lot easier
+;;  * Refactor movement and insertion commands
 ;;
 
 (defstruct (buffer (:conc-name buf-))
@@ -152,25 +153,35 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Moves the cursor up."
   (down (* delta -1)))
 
+(defun join-lines (&optional (offset 1))
+  "Join the current line with the line at OFFSET."
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+      (current-buffer)
+    (when (<= 0 (+ y offset) (1- (length state)))
+     (let ((line (elt state y))
+           (jline (elt state (+ y offset))))
+       (setf (elt state (+ y offset)) (concat jline line))
+       (setf state (remove-at state y))))))
+
 (defun backspace ()
   "Backspaces from cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
       (current-buffer)
-    (if (zerop x)
-        (let ((line (elt state y))
-              (prevline (elt state (1- y))))
-          (setf (elt state (1- y)) (concat prevline line))
-          (setf state (remove-at state y))
-          (decf y)
-          (setf x (1+ (length prevline))))
-        (setf (elt state y) (remove-at (elt state y) (1- x))))
+    (cond ((zerop x)
+           (join-lines -1)
+           (decf y)
+           (setf x (1+ (length (elt state y)))))
+          (t (setf (elt state y) (remove-at (elt state y) (1- x)))))
     (backward)))
 
 (defun delete-char ()
   "Deletes char at cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
       (current-buffer)
-    (setf (elt state y) (remove-at (elt state y) x))))
+    (cond ((= x (length (elt state y)))
+           (join-lines 1)
+           (setf x 0))
+          (t (setf (elt state y) (remove-at (elt state y) x))))))
 
 (defun newline ()
   "Inserts a newline at cursor."
