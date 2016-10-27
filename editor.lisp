@@ -37,7 +37,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
   ;;(state (make-array 1 :element-type 'string :initial-element ""))
   (state (make-array 1 :element-type 'string :initial-contents '("")
                        :adjustable t :fill-pointer t)
-         :type (and vector (not simple-array)))
+         :type (array string 1))
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer)
   (furthest-x 0 :type integer))
@@ -202,7 +202,9 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       (current-buffer)
     (destructuring-bind (s1 s2) (split-at (elt state y) x)
       (setf (elt state y) s1)
-      (insert-into-array state s2 (1- y)))))
+      (incf y)
+      (setf x 0)
+      (insert-into-array state s2 y))))
 
 (defun exit-editor (&optional force)
   "Exits the editor."
