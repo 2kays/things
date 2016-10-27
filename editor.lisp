@@ -34,7 +34,10 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 (defstruct (buffer (:conc-name buf-))
   (name "buffer" :type string)
   (modified nil :type boolean)
-  (state (make-array 1 :element-type 'string :initial-element ""))
+  ;;(state (make-array 1 :element-type 'string :initial-element ""))
+  (state (make-array 1 :element-type 'string :initial-contents '("")
+                       :adjustable t :fill-pointer t)
+         :type (and vector (not simple-array)))
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer)
   (furthest-x 0 :type integer))
@@ -74,7 +77,7 @@ EOF properly."
 (defun state-to-string (state &key newline)
   "Reduce editor state by flattening STATE to a string with newlines, with the
 key argument NEWLINE specifying if an additional newline is added to the end."
-  (concat (format nil "~{~a~^~%~}" state) (and newline (string #\nl))))
+  (concat (format nil "~{~a~^~%~}" (coerce state 'list)) (and newline (string #\nl))))
 
 ;; split a sequence SEQ at POS
 (defun split-at (seq pos)
@@ -97,6 +100,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 (defun remove-at (seq pos &key (count 1))
   "Removes COUNT entries at position POS of SEQ."
   (remove-if (constantly t) seq :start pos :count count))
+
+(defun insert-at (seq pos elem)
+  "Inserts ELEM into SEQ at POS."
+  (format nil "~a~a~a" (subseq seq 0 pos) elem (subseq seq pos)))
+
+(defun insert-into-array (vector value position)
+  (replace vector vector :start2 position :start1 (1+ position) 
+           :end2 (vector-push-extend value vector))
+  (setf (aref vector position) value) 
+  vector)
 
 ;;; Beginning of editor commands
 
@@ -161,7 +174,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
      (let ((line (elt state y))
            (jline (elt state (+ y offset))))
        (setf (elt state (+ y offset)) (concat jline line))
-       (setf state (remove-at state y))))))
+       (setf state (coerce (remove-at state y) '(and vector (not simple-string))))))))
 
 (defun backspace ()
   "Backspaces from cursor."
@@ -187,14 +200,9 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Inserts a newline at cursor."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
       (current-buffer)
-    (let* ((line (elt state y))
-           (l1 (subseq state 0 y))
-           (l2 (subseq state (1+ y)))
-           (s1 (subseq line 0 x))
-           (s2 (subseq line x)))
-      (setf state (concatenate 'list l1 (list s1) (list s2) l2))
-      (incf y)
-      (setf x 0))))
+    (destructuring-bind (s1 s2) (split-at (elt state y) x)
+      (setf (elt state y) s1)
+      (insert-into-array state s2 (1- y)))))
 
 (defun exit-editor (&optional force)
   "Exits the editor."
@@ -269,7 +277,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                     (file-to-list argv)
                     (list ""))))
     (setf *current-buffer*
-          (make-buffer :name bname :state bstate)))
+          (make-buffer :name bname :state (coerce bstate '(and vector (not simple-array))))))
   (charms:with-curses ()
     (let ((theight 0)
           (twidth 0))
