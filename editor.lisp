@@ -17,12 +17,11 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;
 ;; TODO:
 ;;  * Unit tests!!!
-;;  * Multiple ncurses windows: buffer (with scrolling), modeline
+;;  * Multiple ncurses windows: buffer (with scrolling), modeline (DONE-ISH)
 ;;     - Modeline should be have color option
 ;;     - Command to shrink/enlarge modeline, with separate parts
 ;;     - External formatting of the modeline
-;;  * Handle meta key properly, with more complex keymaps
-;;     - Currently we can handle C-, M- and C-M- prefixes.
+;;  * Handle meta key properly, with more complex keymaps (DONE)
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
 ;;    also for general stuff like no-input, unbounded cursor movement, etc.
 ;;  * Primitive CL mode with a SWANK client!
@@ -237,22 +236,13 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Run a command."
   (forward 2))
 
-;;; Meta handling
-
-(defparameter *meta-pressed* nil
-  "Describes if the meta key has been pressed prior.")
-
-(defun meta ()
-  "Handles presses of the meta key."
-  (setf *meta-pressed* t))
-
 ;;; End of editor commands
 
 (defparameter *meta-map*
   `((#\x . ,#'run-command)
     ))
 
-(defparameter *key-map*
+(defparameter *root-keymap*
   `((#\Ack . ,#'forward)                ; C-f
     (#\Stx . ,#'backward)               ; C-b
     (#\So  . ,#'down)                   ; C-n
@@ -271,7 +261,6 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; override global state that may already be setn
   (setf *editor-running* t)
-  (setf *meta-pressed* nil)
   (setf *modeline-height* 1)
   ;; if argv is set, open that file, else create an empty buffer
   (let ((bname (or argv "buffer1"))
@@ -302,7 +291,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
-           :with current-keymap := *key-map*
+           :with current-keymap := *root-keymap*
            :while *editor-running*
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
@@ -313,7 +302,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                (current-buffer)
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
-             (let* ((entry (assoc c current-keymap)))
+             (let* ((entry-pair (assoc c current-keymap)))
                (cond ((null c) nil)     ; ignore nils
                      ;; 32->126 are printable, so print c if it's not a part of
                      ;; a meta command
@@ -322,13 +311,16 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                            (not current-keymap))
                       (insert-char c))
                      ;; if the entry for the keymap has resolved to something
-                     ;; run pit
-                     (entry (cond ((functionp (cdr entry))
-                                   (funcall (cdr entry))
-                                   (setf current-keymap *key-map*))
-                                  ((consp (cdr entry))
-                                   (setf current-keymap (cdr entry)))
-                                  (t (setf current-keymap *key-map*))))))
+                     ;; if it's a function/symbol, run it
+                     ;; if it's a list, set the current keymap to it
+                     (entry-pair (let ((entry (cdr entry-pair)))
+                                   (cond ((or (functionp entry)
+                                              (symbolp entry))
+                                          (funcall entry)
+                                          (setf current-keymap *root-keymap*))
+                                         ((consp entry)
+                                          (setf current-keymap entry))
+                                         (t (setf current-keymap *root-keymap*)))))))
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let* ((mlh *modeline-height*)
@@ -347,8 +339,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                (charms/ll:wnoutrefresh mlwin)
                (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
                                        (1- winh) (- twidth 1))
-               (charms/ll:doupdate))
-             
-             ;;(charms:move-cursor charms:*standard-window* x y)
-             ;;(charms:refresh-window charms:*standard-window*)
-             ))))))
+               (charms/ll:doupdate))))
+        ;; Cleanup
+        (charms/ll:delwin pad)
+        (charms/ll:delwin mlwin)))))
