@@ -249,22 +249,22 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 ;;; End of editor commands
 
 (defparameter *meta-map*
-  '((#\x . run-command)
+  `((#\x . ,#'run-command)
     ))
 
 (defparameter *key-map*
-  '((#\Ack . forward)                   ; C-f
-    (#\Stx . backward)                  ; C-b
-    (#\So . down)                       ; C-n
-    (#\Dle . up)                        ; C-p
-    (#\Del . backspace)                 ; backspace
-    (#\Eot . delete-char)               ; C-d
-    (#\Bs . delete-char)                ; delete
-    (#\Can . exit-editor)               ; C-x
-    (#\Lf . newline)                    ; return
-    (#\Enq . line-end)                  ; C-e
-    (#\Soh . line-beginning)            ; C-a
-    (#\Esc . meta)                      ; meta key (alt/esc)
+  `((#\Ack . ,#'forward)                ; C-f
+    (#\Stx . ,#'backward)               ; C-b
+    (#\So  . ,#'down)                   ; C-n
+    (#\Dle . ,#'up)                     ; C-p
+    (#\Del . ,#'backspace)              ; backspace
+    (#\Eot . ,#'delete-char)            ; C-d
+    (#\Bs  . ,#'delete-char)            ; delete
+    (#\Can . ,#'exit-editor)            ; C-x
+    (#\Lf  . ,#'newline)                ; return
+    (#\Enq . ,#'line-end)               ; C-e
+    (#\Soh . ,#'line-beginning)         ; C-a
+    (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
     ))
 
 (defun main (&optional argv)
@@ -298,35 +298,37 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
         ;; Set up terminal behaviour
         ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
-  
         (charms:disable-echoing)
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
+           :with current-keymap := *key-map*
            :while *editor-running*
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
            ;; Update terminal height and width
            (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
-
            (with-accessors ((name buf-name) (x buf-cursor-x)
                             (y buf-cursor-y) (state buf-state))
                (current-buffer)
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
-             (let* ((map (if *meta-pressed* *meta-map* *key-map*))
-                    (entry (assoc c map)))
+             (let* ((entry (assoc c current-keymap)))
                (cond ((null c) nil)     ; ignore nils
                      ;; 32->126 are printable, so print c if it's not a part of
                      ;; a meta command
                      ((and (> (char-code c) 31)
                            (< (char-code c) 127)
-                           (not *meta-pressed*))
+                           (not current-keymap))
                       (insert-char c))
                      ;; if the entry for the keymap has resolved to something
-                     ;; run it
-                     (entry (setf *meta-pressed* nil)
-                            (funcall (cdr entry)))))
+                     ;; run pit
+                     (entry (cond ((functionp (cdr entry))
+                                   (funcall (cdr entry))
+                                   (setf current-keymap *key-map*))
+                                  ((consp (cdr entry))
+                                   (setf current-keymap (cdr entry)))
+                                  (t (setf current-keymap *key-map*))))))
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let* ((mlh *modeline-height*)
