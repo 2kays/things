@@ -1,5 +1,5 @@
 (defpackage #:babbymacs
-  (:use :cl :asdf :cl-charms)
+  (:use :cl :asdf :cl-charms :cffi)
   (:export main))
 
 (in-package :babbymacs)
@@ -41,6 +41,18 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
   (cursor-y 0 :type integer)
   (furthest-x 0 :type integer))
 
+(defconstant +SIGINT+ 2
+  "SIGINT UNIX signal code.")
+ 
+(defmacro set-signal-handler (signo &body body)
+  "Generates a signal handler for SIGNO from BODY."
+  (let ((handler (gensym "HANDLER")))
+    `(progn
+       (cffi:defcallback ,handler :void ((signo :int))
+         (declare (ignore signo))
+         ,@body)
+       (cffi:foreign-funcall "signal" :int ,signo :pointer (cffi:callback ,handler)))))
+
 (defparameter *editor-running* nil
   "The editor's running state.")
 
@@ -49,6 +61,29 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 
 (defparameter *current-buffer* nil)
 (defun current-buffer () *current-buffer*)
+
+(defparameter *current-keymap* nil
+  "The current keymap for input lookups.")
+
+(defun resolve-key (c)
+  "Resolves an input key C to a command or nested keymap according to the
+current global keymap."
+  (let* ((entry-pair (assoc c (if *current-keymap*
+                                  *current-keymap*
+                                  *root-keymap*))))
+    ;; if the entry for the keymap has resolved to something
+    ;; if it's a function/symbol, run it
+    ;; if it's a list, set the current keymap to it
+    (if entry-pair
+        (let ((entry (cdr entry-pair)))
+          (cond ((or (functionp entry)
+                     (symbolp entry))
+                 (funcall entry)
+                 (setf *current-keymap* nil))
+                ((consp entry)
+                 (setf *current-keymap* entry))
+                (t (setf *current-keymap* nil))))
+        (setf *current-keymap* nil))))
 
 (defun concat (&rest args)
   "Concatenates ARGS to a string."
@@ -264,12 +299,19 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
     ))
 
+(defun main2 (&optional argv)
+  (sb-sys:without-interrupts (main argv)))
+
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-  #+sbcl (sb-sys:ignore-interrupt 2)    ; ignore SIGINT on SBCL
+
+  ;; Resolve C-c SIGINTs to C-c in the keymap
+  (set-signal-handler +SIGINT+ (resolve-key #\Etx))
+
   ;; FIX SBCL COMPLETELY IGNORING C-c ^^^^
   (setf *editor-running* t)
   (setf *modeline-height* 1)
+  (setf *current-keymap* nil)
   ;; if argv is set, open that file, else create an empty buffer
   (let ((bname (or argv "buffer1"))
         (bstate (if argv
@@ -303,7 +345,6 @@ key argument NEWLINE specifying if an additional newline is added to the end."
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
-           :with current-keymap
            :while *editor-running*
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
@@ -314,29 +355,15 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                (current-buffer)
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
+             ;;(if c (format t "received ~s~%" c))
              (cond ((null c) nil)       ; ignore nils
                    ;; 32->126 are printable, so print c if it's not a part of
                    ;; a meta command
                    ((and (> (char-code c) 31)
                          (< (char-code c) 127)
-                         (not current-keymap))
+                         (not *current-keymap*))
                     (insert-char c))
-                   (t (let* ((entry-pair (assoc c (if current-keymap
-                                                      current-keymap
-                                                      *root-keymap*))))
-                        ;; if the entry for the keymap has resolved to something
-                        ;; if it's a function/symbol, run it
-                        ;; if it's a list, set the current keymap to it
-                        (if entry-pair
-                            (let ((entry (cdr entry-pair)))
-                              (cond ((or (functionp entry)
-                                         (symbolp entry))
-                                     (funcall entry)
-                                     (setf current-keymap nil))
-                                    ((consp entry)
-                                     (setf current-keymap entry))
-                                    (t (setf current-keymap nil))))
-                            (setf current-keymap nil)))))
+                   (t (resolve-key c)))
 
              
              ;; write the updated file state to the pad and display it at the
