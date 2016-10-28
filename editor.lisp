@@ -208,6 +208,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 (defun exit-editor (&optional force)
   "Exits the editor."
   (if (not force) nil) ;; change this to ask the user if they're sure
+  (format t "Exiting..~%")
   (setf *editor-running* nil))
 
 (defun line-end ()
@@ -242,24 +243,29 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   `((#\x . ,#'run-command)
     ))
 
+(defparameter *c-x-map*
+  `((#\Etx . ,#'exit-editor)            ; C-x C-c (NOT WORKING)
+    (#\q   . ,#'exit-editor)            ; C-x q
+    ))
+
 (defparameter *root-keymap*
-  `((#\Ack . ,#'forward)                ; C-f
-    (#\Stx . ,#'backward)               ; C-b
-    (#\So  . ,#'down)                   ; C-n
-    (#\Dle . ,#'up)                     ; C-p
-    (#\Del . ,#'backspace)              ; backspace
-    (#\Eot . ,#'delete-char)            ; C-d
-    (#\Bs  . ,#'delete-char)            ; delete
-    (#\Can . ,#'exit-editor)            ; C-x
-    (#\Lf  . ,#'newline)                ; return
-    (#\Enq . ,#'line-end)               ; C-e
-    (#\Soh . ,#'line-beginning)         ; C-a
+  `((#\Ack . forward)                   ; C-f
+    (#\Stx . backward)                  ; C-b
+    (#\So  . down)                      ; C-n
+    (#\Dle . up)                        ; C-p
+    (#\Del . backspace)                 ; backspace
+    (#\Eot . delete-char)               ; C-d
+    (#\Bs  . delete-char)               ; delete
+    (#\Can . ,*c-x-map*)                ; C-x
+    (#\Lf  . newline)                   ; return
+    (#\Enq . line-end)                  ; C-e
+    (#\Soh . line-beginning)            ; C-a
     (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
     ))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-  ;; override global state that may already be setn
+  #+sbcl (sb-sys:ignore-interrupt 2)    ; ignore SIGINT on SBCL  
   (setf *editor-running* t)
   (setf *modeline-height* 1)
   ;; if argv is set, open that file, else create an empty buffer
@@ -291,7 +297,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
-           :with current-keymap := *root-keymap*
+           :with current-keymap
            :while *editor-running*
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
@@ -302,25 +308,31 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                (current-buffer)
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
-             (let* ((entry-pair (assoc c current-keymap)))
-               (cond ((null c) nil)     ; ignore nils
-                     ;; 32->126 are printable, so print c if it's not a part of
-                     ;; a meta command
-                     ((and (> (char-code c) 31)
-                           (< (char-code c) 127)
-                           (not current-keymap))
-                      (insert-char c))
-                     ;; if the entry for the keymap has resolved to something
-                     ;; if it's a function/symbol, run it
-                     ;; if it's a list, set the current keymap to it
-                     (entry-pair (let ((entry (cdr entry-pair)))
-                                   (cond ((or (functionp entry)
-                                              (symbolp entry))
-                                          (funcall entry)
-                                          (setf current-keymap *root-keymap*))
-                                         ((consp entry)
-                                          (setf current-keymap entry))
-                                         (t (setf current-keymap *root-keymap*)))))))
+             (cond ((null c) nil)       ; ignore nils
+                   ;; 32->126 are printable, so print c if it's not a part of
+                   ;; a meta command
+                   ((and (> (char-code c) 31)
+                         (< (char-code c) 127)
+                         (not current-keymap))
+                    (insert-char c))
+                   (t (let* ((entry-pair (assoc c (if current-keymap
+                                                      current-keymap
+                                                      *root-keymap*))))
+                        ;; if the entry for the keymap has resolved to something
+                        ;; if it's a function/symbol, run it
+                        ;; if it's a list, set the current keymap to it
+                        (if entry-pair
+                            (let ((entry (cdr entry-pair)))
+                              (cond ((or (functionp entry)
+                                         (symbolp entry))
+                                     (funcall entry)
+                                     (setf current-keymap nil))
+                                    ((consp entry)
+                                     (setf current-keymap entry))
+                                    (t (setf current-keymap nil))))
+                            (setf current-keymap nil)))))
+
+             
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let* ((mlh *modeline-height*)
