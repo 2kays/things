@@ -21,7 +21,8 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;     - Modeline should be have color option
 ;;     - Command to shrink/enlarge modeline, with separate parts
 ;;     - External formatting of the modeline
-;;  * Handle meta key properly, with more complex keymaps (DONE)
+;;  * Handle meta key properly, with more complex keymaps (DONE-MOSTLY)
+;;     - TODO: FIX SBCL IGNORING C-c. IT NO LONGER SIGINTS BUT ITS NOW USELESS
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
 ;;    also for general stuff like no-input, unbounded cursor movement, etc.
 ;;  * Primitive CL mode with a SWANK client!
@@ -34,9 +35,8 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
   (name "buffer" :type string)
   (modified nil :type boolean)
   ;;(state (make-array 1 :element-type 'string :initial-element ""))
-  (state (make-array 1 :element-type 'string :initial-contents '("")
-                       :adjustable t :fill-pointer t)
-         :type (array string 1))
+  (state (make-array 1 :element-type 'string :initial-element ""
+                     :adjustable t :fill-pointer t))
   (cursor-x 0 :type integer)
   (cursor-y 0 :type integer)
   (furthest-x 0 :type integer))
@@ -100,9 +100,9 @@ key argument NEWLINE specifying if an additional newline is added to the end."
   "Removes COUNT entries at position POS of SEQ."
   (remove-if (constantly t) seq :start pos :count count))
 
-(defun insert-at (seq pos elem)
-  "Inserts ELEM into SEQ at POS."
-  (format nil "~a~a~a" (subseq seq 0 pos) elem (subseq seq pos)))
+(defun string-insert-at* (string pos elem)
+  "Inserts ELEM into STRING at POS."
+  (format nil "~a~a~a" (subseq string 0 pos) elem (subseq string pos)))
 
 (defun insert-into-array (vector value position)
   (replace vector vector :start2 position :start1 (1+ position) 
@@ -173,6 +173,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
      (let ((line (elt state y))
            (jline (elt state (+ y offset))))
        (setf (elt state (+ y offset)) (concat jline line))
+       ;; TODO: operate on the array, rather than reset it
        (setf state (coerce (remove-at state y) '(and vector (not simple-string))))))))
 
 (defun backspace ()
@@ -265,7 +266,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-  #+sbcl (sb-sys:ignore-interrupt 2)    ; ignore SIGINT on SBCL  
+  #+sbcl (sb-sys:ignore-interrupt 2)    ; ignore SIGINT on SBCL
+  ;; FIX SBCL COMPLETELY IGNORING C-c ^^^^
   (setf *editor-running* t)
   (setf *modeline-height* 1)
   ;; if argv is set, open that file, else create an empty buffer
@@ -274,7 +276,11 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                     (file-to-list argv)
                     (list ""))))
     (setf *current-buffer*
-          (make-buffer :name bname :state (coerce bstate '(and vector (not simple-array))))))
+          (make-buffer :name bname
+                       :state (make-array (length bstate) :element-type 'string
+                                          :fill-pointer t
+                                          :adjustable t
+                                          :initial-contents bstate))))
   (charms:with-curses ()
     (let ((theight 0)
           (twidth 0))
