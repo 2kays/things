@@ -30,15 +30,18 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * Refactor movement and insertion commands (IN-PROGRESS)
 ;;
 
-(defstruct (buffer (:conc-name buf-))
-  (name "buffer" :type string)
-  (modified nil :type boolean)
-  ;;(state (make-array 1 :element-type 'string :initial-element ""))
-  (state (make-array 1 :element-type 'string :initial-element ""
-                     :adjustable t :fill-pointer t))
-  (cursor-x 0 :type integer)
-  (cursor-y 0 :type integer)
-  (furthest-x 0 :type integer))
+(defclass buffer* ()
+  ((name :accessor buf-name
+         :initform "buffer"
+         :initarg :name
+         :type string)
+   (state :accessor buf-state
+          :initform (make-array 1 :element-type 'string :initial-element ""
+                                :adjustable t :fill-pointer t)
+          :initarg :state)
+   (cursor-x :accessor buf-cursor-x :initform 0 :type integer)
+   (cursor-y :accessor buf-cursor-y :initform 0 :type integer)
+   (furthest-x :accessor buf-furthest-x :initform 0 :type integer)))
 
 (defconstant +SIGINT+ 2
   "SIGINT UNIX signal code.")
@@ -61,7 +64,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 (defparameter *editor-running* nil
   "The editor's running state.")
 
-(defparameter *modeline-height* 2
+(defparameter *modeline-height* 1
   "The height of the mode line.")
 
 (defparameter *modeline-format*
@@ -294,7 +297,9 @@ is replaced with replacement."
 
 (defun run-command ()
   "Run a command."
-  (forward 2))
+  (let ((str ""))
+    
+    (print (eval str))))
 
 ;;; End of editor commands
 
@@ -356,11 +361,12 @@ current global keymap."
                     (file-to-list argv)
                     (list ""))))
     (setf *current-buffer*
-          (make-buffer :name bname
-                       :state (make-array (length bstate) :element-type 'string
-                                          :fill-pointer t
-                                          :adjustable t
-                                          :initial-contents bstate))))
+          (make-instance 'buffer*
+                         :name bname
+                         :state (make-array (length bstate) :element-type 'string
+                                            :fill-pointer t
+                                            :adjustable t
+                                            :initial-contents bstate))))
   (charms:with-curses ()
     (let ((theight 1)
           (twidth 1))
@@ -394,7 +400,7 @@ current global keymap."
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
              ;;(if c (format t "received ~s~%" c))
-             (cond ((null c) nil) ; ignore nils
+             (cond ((null c) nil)       ; ignore nils
                    ;; 32->126 are printable, so print c if it's not a part of
                    ;; a meta command
                    ((and (> (char-code c) 31)
