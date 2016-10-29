@@ -46,6 +46,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
  
 (defmacro set-signal-handler (signo &body body)
   "Generates a signal handler for SIGNO from BODY."
+  ;; Lifted from stackoverflow
   (let ((handler (gensym "HANDLER")))
     `(progn
        (cffi:defcallback ,handler :void ((signo :int))
@@ -53,37 +54,43 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
          ,@body)
        (cffi:foreign-funcall "signal" :int ,signo :pointer (cffi:callback ,handler)))))
 
+(defparameter *current-buffer* nil)
+(defun current-buffer ()
+  "Returns the current buffer."
+  *current-buffer*)
+
 (defparameter *editor-running* nil
   "The editor's running state.")
 
-(defparameter *modeline-height* 1
+(defparameter *modeline-height* 2
   "The height of the mode line.")
 
-(defparameter *current-buffer* nil)
-(defun current-buffer () *current-buffer*)
+(defparameter *modeline-format*
+  '("%p% (%x,%y) %b"
+    "%b")
+  "Describes the format of the modeline at various sizes.")
+
+(defun modeline-formatter ()
+  "Returns the formatted modeline strings."
+  (with-accessors ((name buf-name) (x buf-cursor-x) (y buf-cursor-y)
+                   (state buf-state))
+      (current-buffer)
+    ;; TODO: this is awful, refactor
+    (loop :with spec := (list (cons "%p" (write-to-string
+                                          (truncate (* (/ y (max 1 (1- (length state))))
+                                                       100))))
+                              (cons "%x" (write-to-string x))
+                              (cons "%y" (write-to-string y))
+                              (cons "%b" name))
+       :for s :in *modeline-format*
+       :collect (loop :with modified := s
+                   :for (k . v) :in spec
+                   :do (setf modified (replace-all modified k v))
+                   :finally (return modified)))))
+
 
 (defparameter *current-keymap* nil
   "The current keymap for input lookups.")
-
-(defun resolve-key (c)
-  "Resolves an input key C to a command or nested keymap according to the
-current global keymap."
-  (let* ((entry-pair (assoc c (if *current-keymap*
-                                  *current-keymap*
-                                  *root-keymap*))))
-    ;; if the entry for the keymap has resolved to something
-    ;; if it's a function/symbol, run it
-    ;; if it's a list, set the current keymap to it
-    (if entry-pair
-        (let ((entry (cdr entry-pair)))
-          (cond ((or (functionp entry)
-                     (symbolp entry))
-                 (funcall entry)
-                 (setf *current-keymap* nil))
-                ((consp entry)
-                 (setf *current-keymap* entry))
-                (t (setf *current-keymap* nil))))
-        (setf *current-keymap* nil))))
 
 (defun concat (&rest args)
   "Concatenates ARGS to a string."
@@ -130,6 +137,21 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                        (split-at seq (- pos offset))
                      (cons s1 (sm-helper s2 pos (rest positions))))))))
     (sm-helper seq 0 positions)))
+
+(defun replace-all (string part replacement &key (test #'char=))
+  "Returns a new string in which all the occurences of the part 
+is replaced with replacement."
+  (with-output-to-string (out)
+    (loop :with part-length := (length part)
+          :for old-pos = 0 :then (+ pos part-length)
+          :for pos := (search part string
+                            :start2 old-pos
+                            :test test)
+          :do (write-string string out
+                           :start old-pos
+                           :end (or pos (length string)))
+          :when pos :do (write-string replacement out)
+       :while pos)))
 
 (defun remove-at (seq pos &key (count 1))
   "Removes COUNT entries at position POS of SEQ."
@@ -299,16 +321,31 @@ key argument NEWLINE specifying if an additional newline is added to the end."
     (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
     ))
 
-(defun main2 (&optional argv)
-  (sb-sys:without-interrupts (main argv)))
+(defun resolve-key (c)
+  "Resolves an input key C to a command or nested keymap according to the
+current global keymap."
+  (let* ((entry-pair (assoc c (if *current-keymap*
+                                  *current-keymap*
+                                  *root-keymap*))))
+    ;; if the entry for the keymap has resolved to something
+    ;; if it's a function/symbol, run it
+    ;; if it's a list, set the current keymap to it
+    (if entry-pair
+        (let ((entry (cdr entry-pair)))
+          (cond ((or (functionp entry)
+                     (symbolp entry))
+                 (funcall entry)
+                 (setf *current-keymap* nil))
+                ((consp entry)
+                 (setf *current-keymap* entry))
+                (t (setf *current-keymap* nil))))
+        (setf *current-keymap* nil))))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
-
   ;; Resolve C-c SIGINTs to C-c in the keymap
   (set-signal-handler +SIGINT+ (resolve-key #\Etx))
-
-  ;; FIX SBCL COMPLETELY IGNORING C-c ^^^^
+  
   (setf *editor-running* t)
   (setf *modeline-height* 1)
   (setf *current-keymap* nil)
@@ -324,8 +361,8 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                                           :adjustable t
                                           :initial-contents bstate))))
   (charms:with-curses ()
-    (let ((theight 0)
-          (twidth 0))
+    (let ((theight 1)
+          (twidth 1))
       ;; Set initial terminal size
       (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
       ;; Build the pad according to the file state
@@ -336,9 +373,9 @@ key argument NEWLINE specifying if an additional newline is added to the end."
       ;; So we take `ceil(theight / lines)`, which gives us that multiple.
       ;; We multiply theight by that for the pad height.
       ;; TODO: dynamically react to terminal height changes when allocating pad
-      (let* ((page-cnt (ceiling (length (buf-state (current-buffer))) theight))
+      (let* ((page-cnt (ceiling (/ theight (length (buf-state (current-buffer))))))
              (pad (charms/ll:newpad (* theight page-cnt) 150))
-             (mlwin (charms/ll:newwin 1 (1- twidth) (1- theight) 0)))
+             (mlwin (charms/ll:newwin *modeline-height* (1- twidth) (- theight *modeline-height* 1) 0)))
         ;; Set up terminal behaviour
         ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
         (charms:disable-echoing)
@@ -356,7 +393,7 @@ key argument NEWLINE specifying if an additional newline is added to the end."
              ;; if we previously pressed the meta key, resolve commands from the
              ;; meta map, otherwise use the standard root key map
              ;;(if c (format t "received ~s~%" c))
-             (cond ((null c) nil)       ; ignore nils
+             (cond ((null c) nil) ; ignore nils
                    ;; 32->126 are printable, so print c if it's not a part of
                    ;; a meta command
                    ((and (> (char-code c) 31)
@@ -364,18 +401,18 @@ key argument NEWLINE specifying if an additional newline is added to the end."
                          (not *current-keymap*))
                     (insert-char c))
                    (t (resolve-key c)))
-
-             
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let* ((mlh *modeline-height*)
-                    (winh (- theight mlh))
-                    (mstr (format nil "~a% (~a,~a) ~a "
-                                  (truncate (* 100 (/ y (1- (length state)))))
-                                  x y name)))
-               (when (not (zerop mlh))
+                    (winh (- theight mlh 1))
+                    (mstrs (modeline-formatter)))
+               ;; Draw the modeline
+               (unless (zerop mlh)
                  (charms/ll:werase mlwin)
-                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr))
+                 (dotimes (mline mlh)
+                   (let ((mstr (elt mstrs mline)))
+                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
+                                          mstr))))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
