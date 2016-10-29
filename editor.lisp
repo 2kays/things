@@ -20,15 +20,14 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline (DONE-ISH)
 ;;     - Modeline should be have color option
 ;;     - Command to shrink/enlarge modeline, with separate parts
-;;     - External formatting of the modeline
+;;     - External formatting of the modeline (DONE-ISH)
 ;;  * Handle meta key properly, with more complex keymaps (DONE-MOSTLY)
-;;     - TODO: FIX SBCL IGNORING C-c. IT NO LONGER SIGINTS BUT ITS NOW USELESS
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
 ;;    also for general stuff like no-input, unbounded cursor movement, etc.
 ;;  * Primitive CL mode with a SWANK client!
 ;;  * Colours!
 ;;  * Convert to CLOS? Modes might be a lot easier
-;;  * Refactor movement and insertion commands
+;;  * Refactor movement and insertion commands (IN-PROGRESS)
 ;;
 
 (defstruct (buffer (:conc-name buf-))
@@ -231,6 +230,8 @@ is replaced with replacement."
            (jline (elt state (+ y offset))))
        (setf (elt state (+ y offset)) (concat jline line))
        ;; TODO: operate on the array, rather than reset it
+       ;; fairly sure this is the source of the issues with the buffer typing
+       ;; being wrong (simple-vector instead of (vector t))
        (setf state (coerce (remove-at state y) '(and vector (not simple-string))))))))
 
 (defun backspace ()
@@ -259,9 +260,9 @@ is replaced with replacement."
       (current-buffer)
     (destructuring-bind (s1 s2) (split-at (elt state y) x)
       (setf (elt state y) s1)
+      (insert-into-array state s2 (1+ y))
       (down)
-      (line-beginning)
-      (insert-into-array state s2 y))))
+      (line-beginning))))
 
 (defun exit-editor (&optional force)
   "Exits the editor."
@@ -408,6 +409,8 @@ current global keymap."
                     (mstrs (modeline-formatter)))
                ;; Draw the modeline
                (unless (zerop mlh)
+                 ;; oh no please don't tell me I need multiple ncurses windows
+                 ;; to implement multiple modelines...
                  (charms/ll:werase mlwin)
                  (dotimes (mline mlh)
                    (let ((mstr (elt mstrs mline)))
