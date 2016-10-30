@@ -68,8 +68,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
   "The height of the mode line.")
 
 (defparameter *modeline-format*
-  '("%p% (%x,%y) %b"
-    "%b")
+  '(" %p% (%x,%y) : %b ")
   "Describes the format of the modeline at various sizes.")
 
 (defun modeline-formatter ()
@@ -300,17 +299,24 @@ is replaced with replacement."
   "Run a command input by the user. Hijacks the current key input."
   (setf *command-typed* (make-array 0 :fill-pointer t :adjustable t
                                     :element-type 'character))
-  (loop :named cmd-loop
-     :while *editor-running*
-     :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-     :do
-     (cond ((null c) nil)
-           ((and (> (char-code c) 31)
-                 (< (char-code c) 127))
-            (vector-push-extend c *command-typed*))
-           ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
-           (t (return-from cmd-loop))))
-  (eval (read-from-string *command-typed*)))
+  (let ((cmdwin (charms/ll:newwin 1 64 0 0)))
+    (loop :named cmd-loop
+       :while *editor-running*
+       :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+       :do
+       (charms/ll:werase cmdwin)
+       (charms/ll:waddstr cmdwin (concat "Command: " *command-typed*))
+       (cond ((null c) nil)
+             ((and (> (char-code c) 31)
+                   (< (char-code c) 127))
+              (vector-push-extend c *command-typed*))
+             ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
+             ((eql c #\Del) (vector-pop *command-typed*))
+             (t (return-from cmd-loop)))
+       (charms/ll:wrefresh cmdwin))
+
+    (charms/ll:delwin cmdwin)
+    (and *command-typed* (eval (read-from-string *command-typed*)))))
 
 ;;; End of editor commands
 
@@ -379,10 +385,13 @@ current global keymap."
                                             :adjustable t
                                             :initial-contents bstate))))
   (charms:with-curses ()
+    (charms/ll:start-color)
     (let ((theight 1)
           (twidth 1))
       ;; Set initial terminal size
       (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+      (charms/ll:use-default-colors)
+      (charms/ll:init-pair 1 charms/ll:color_white charms/ll:color_black)
       ;; Build the pad according to the file state
       ;; TODO: programmatically determine column max (150 is reasonable for now)
       ;; EXPLANATION FOR FUTURE ME
@@ -393,7 +402,7 @@ current global keymap."
       ;; TODO: dynamically react to terminal height changes when allocating pad
       (let* ((page-cnt (ceiling (/ theight (length (buf-state (current-buffer))))))
              (pad (charms/ll:newpad (* theight page-cnt) 150))
-             (mlwin (charms/ll:newwin *modeline-height* (1- twidth) (- theight *modeline-height* 1) 0)))
+             (mlwin (charms/ll:newwin *modeline-height* (1- twidth) (- theight *modeline-height*) 0)))
         ;; Set up terminal behaviour
         ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
         (charms:disable-echoing)
@@ -429,19 +438,22 @@ current global keymap."
                  ;; oh no please don't tell me I need multiple ncurses windows
                  ;; to implement multiple modelines...
                  (charms/ll:werase mlwin)
+                 (charms/ll:wattron mlwin (charms/ll:color-pair 1))
                  (dotimes (mline mlh)
-                   (let ((mstr (elt mstrs mline)))
-                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
-                                          mstr))))
+                   (let ((mstr (elt mstrs mline)))                     
+                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr))
+                                          mstr)))
+                 (charms/ll:wattroff mlwin (charms/ll:color-pair 1)))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                (charms/ll:wmove pad y x)
-               
                (charms/ll:wnoutrefresh mlwin)
                (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
                                        (1- winh) (- twidth 1))
                (charms/ll:doupdate))))
         ;; Cleanup
+        ;; (charms/ll:init-pair 1 charms/ll:color_black charms/ll:color_white)
         (charms/ll:delwin pad)
-        (charms/ll:delwin mlwin)))))
+        (charms/ll:delwin mlwin)
+        (charms/ll:standend)))))
