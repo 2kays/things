@@ -295,11 +295,22 @@ is replaced with replacement."
       (setf (elt state y) (format nil "~a~a~a" s1 c s2))
       (forward))))
 
+(defparameter *command-typed* nil)
 (defun run-command ()
-  "Run a command."
-  (let ((str ""))
-    
-    (print (eval str))))
+  "Run a command input by the user. Hijacks the current key input."
+  (setf *command-typed* (make-array 0 :fill-pointer t :adjustable t
+                                    :element-type 'character))
+  (loop :named cmd-loop
+     :while *editor-running*
+     :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+     :do
+     (cond ((null c) nil)
+           ((and (> (char-code c) 31)
+                 (< (char-code c) 127))
+            (vector-push-extend c *command-typed*))
+           ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
+           (t (return-from cmd-loop))))
+  (eval (read-from-string *command-typed*)))
 
 ;;; End of editor commands
 
