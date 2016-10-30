@@ -89,7 +89,6 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
                    :do (setf modified (replace-all modified k v))
                    :finally (return modified)))))
 
-
 (defparameter *current-keymap* nil
   "The current keymap for input lookups.")
 
@@ -163,9 +162,16 @@ is replaced with replacement."
   (format nil "~a~a~a" (subseq string 0 pos) elem (subseq string pos)))
 
 (defun insert-into-array (vector value position)
+  "Inserts VALUE into VECTOR at POSITION."
   (replace vector vector :start2 position :start1 (1+ position) 
            :end2 (vector-push-extend value vector))
   (setf (aref vector position) value) 
+  vector)
+
+(defun remove-from-array (vector position)
+  "Removes element at POSITION from VECTOR."
+  (replace vector vector :start2 (1+ position) :start1 position)
+  (vector-pop vector)
   vector)
 
 ;;; Beginning of editor commands
@@ -231,10 +237,7 @@ is replaced with replacement."
      (let ((line (elt state y))
            (jline (elt state (+ y offset))))
        (setf (elt state (+ y offset)) (concat jline line))
-       ;; TODO: operate on the array, rather than reset it
-       ;; fairly sure this is the source of the issues with the buffer typing
-       ;; being wrong (simple-vector instead of (vector t))
-       (setf state (coerce (remove-at state y) '(and vector (not simple-string))))))))
+       (remove-from-array state y)))))
 
 (defun backspace ()
   "Backspaces from cursor."
