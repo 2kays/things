@@ -5,7 +5,7 @@
 (in-package :babbymacs)
 
 "
-Easy REPL setup - why dpoesn't paredit like #| |# ?
+Easy REPL setup - why doesn't paredit like #| |# ?
 (ql:quickload '(:swank :cl-charms) :silent t)
 (swank:create-server :port 4006 :dont-close t)
 "
@@ -19,7 +19,6 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * Unit tests!!!
 ;;  * Multiple ncurses windows: buffer (with scrolling), modeline (DONE-ISH)
 ;;     - Modeline should be have color option
-;;     - Command to shrink/enlarge modeline, with separate parts
 ;;     - External formatting of the modeline (DONE-ISH)
 ;;  * Handle meta key properly, with more complex keymaps (DONE-MOSTLY)
 ;;  * Potentially implement major/minors? I want to have modes for editing, but
@@ -28,11 +27,18 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 ;;  * Colours!
 ;;  * Convert to CLOS? Modes might be a lot easier
 ;;  * Refactor movement and insertion commands (IN-PROGRESS)
+;;  * Multiple buffers
+;;  * Popup window like Emacs' popwin.el for completions/command result etc.
+;;  * Refactor command popup window into something more flexible than hijacking
+;;    the key input loop for its own purposes.
+;;     - Implement as an instance of a floating/popup window?
+;;     - Display the result of a command if one is provided.
 ;;
+
+(defparameter *buffer-count* 0 "Count of created buffers for naming purposes.")
 
 (defclass buffer* ()
   ((name :accessor buf-name
-         :initform "buffer"
          :initarg :name
          :type string)
    (state :accessor buf-state
@@ -42,6 +48,16 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
    (cursor-x :accessor buf-cursor-x :initform 0 :type integer)
    (cursor-y :accessor buf-cursor-y :initform 0 :type integer)
    (furthest-x :accessor buf-furthest-x :initform 0 :type integer)))
+
+(defclass editor ()
+  ((current :accessor editor-current :initform 0 :type integer)
+   (buffers :accessor editor-buffers
+            :initform (list (make-instance 'buffer*))
+            :type list)
+   (running :accessor editor-running :initform t :type boolean)
+   (bufcount :accessor editor-bufcount :initform 0 :type integer)))
+
+(defparameter *editor-instance* nil)
 
 (defconstant +SIGINT+ 2
   "SIGINT UNIX signal code.")
@@ -56,13 +72,9 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
          ,@body)
        (cffi:foreign-funcall "signal" :int ,signo :pointer (cffi:callback ,handler)))))
 
-(defparameter *current-buffer* nil)
 (defun current-buffer ()
   "Returns the current buffer."
-  *current-buffer*)
-
-(defparameter *editor-running* nil
-  "The editor's running state.")
+  (elt (editor-buffers *editor-instance*) (editor-current *editor-instance*)))
 
 (defparameter *modeline-height* 1
   "The height of the mode line.")
@@ -271,7 +283,7 @@ is replaced with replacement."
   "Exits the editor."
   (if (not force) nil) ;; change this to ask the user if they're sure
   (format t "Exiting..~%")
-  (setf *editor-running* nil))
+  (setf (editor-running *editor-instance*) nil))
 
 (defun line-end ()
   "Jumps to the end of a line."
@@ -372,22 +384,22 @@ current global keymap."
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; Resolve C-c SIGINTs to C-c in the keymap
   (set-signal-handler +SIGINT+ (resolve-key #\Etx))
-  
-  (setf *editor-running* t)
+  (setf *editor-instance* (make-instance 'editor))
   (setf *modeline-height* 1)
   (setf *current-keymap* nil)
   ;; if argv is set, open that file, else create an empty buffer
-  (let ((bname (or argv "buffer1"))
+  (let ((bname (or argv (format nil "buffer~s"
+                                (incf (editor-bufcount *editor-instance*)))))
         (bstate (if argv
                     (file-to-list argv)
                     (list ""))))
-    (setf *current-buffer*
-          (make-instance 'buffer*
+    (push (make-instance 'buffer*
                          :name bname
                          :state (make-array (length bstate) :element-type 'string
                                             :fill-pointer t
                                             :adjustable t
-                                            :initial-contents bstate))))
+                                            :initial-contents bstate))
+          (editor-buffers *editor-instance*)))
   (charms:with-curses ()
     (charms/ll:start-color)
     (let ((theight 1)
@@ -413,7 +425,7 @@ current global keymap."
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
         (loop :named driver-loop
-           :while *editor-running*
+           :while (editor-running *editor-instance*)
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
            ;; Update terminal height and width
