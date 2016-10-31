@@ -68,7 +68,7 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
   "The height of the mode line.")
 
 (defparameter *modeline-format*
-  '(" %p% (%x,%y) : %b ")
+  '("%p% (%x,%y) : %b")
   "Describes the format of the modeline at various sizes.")
 
 (defun modeline-formatter ()
@@ -302,24 +302,27 @@ is replaced with replacement."
   "Run a command input by the user. Hijacks the current key input."
   (setf *command-typed* (make-array 0 :fill-pointer t :adjustable t
                                     :element-type 'character))
-  (let ((cmdwin (charms/ll:newwin 1 64 0 0)))
-    (loop :named cmd-loop
-       :while *editor-running*
-       :for c := (charms:get-char charms:*standard-window* :ignore-error t)
-       :do
-       (charms/ll:werase cmdwin)
-       (charms/ll:waddstr cmdwin (concat "Command: " *command-typed*))
-       (cond ((null c) nil)
-             ((and (> (char-code c) 31)
-                   (< (char-code c) 127))
-              (vector-push-extend c *command-typed*))
-             ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
-             ((eql c #\Del) (vector-pop *command-typed*))
-             (t (return-from cmd-loop)))
-       (charms/ll:wrefresh cmdwin))
-
-    (charms/ll:delwin cmdwin)
-    (and *command-typed* (eval (read-from-string *command-typed*)))))
+  (let ((theight 1) (twidth 1))
+    (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+    (let ((cmdwin (charms/ll:newwin 1 64 (1- theight) 0)))
+      (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
+      (loop :named cmd-loop
+         :while *editor-running*
+         :for c := (charms:get-char charms:*standard-window* :ignore-error t)
+         :do
+         (charms/ll:werase cmdwin)
+         (charms/ll:waddstr cmdwin (concat "Command: " *command-typed*))
+         (cond ((null c) nil)
+               ((and (> (char-code c) 31)
+                     (< (char-code c) 127))
+                (vector-push-extend c *command-typed*))
+               ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
+               ((eql c #\Del) (vector-pop *command-typed*))
+               (t (return-from cmd-loop)))
+         (charms/ll:wrefresh cmdwin))
+      (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
+      (charms/ll:delwin cmdwin)
+      (and *command-typed* (eval (read-from-string *command-typed*))))))
 
 ;;; End of editor commands
 
@@ -403,7 +406,7 @@ current global keymap."
       ;; So we take `ceil(theight / lines)`, which gives us that multiple.
       ;; We multiply theight by that for the pad height.
       ;; TODO: dynamically react to terminal height changes when allocating pad
-      (let* ((page-cnt (ceiling (/ theight (length (buf-state (current-buffer))))))
+      (let* ((page-cnt (ceiling (length (buf-state (current-buffer))) theight))
              (pad (charms/ll:newpad (* theight page-cnt) 150))
              (mlwin (charms/ll:newwin *modeline-height* (1- twidth) (- theight *modeline-height*) 0)))
         ;; Set up terminal behaviour
@@ -444,7 +447,7 @@ current global keymap."
                  (charms/ll:wattron mlwin (charms/ll:color-pair 1))
                  (dotimes (mline mlh)
                    (let ((mstr (elt mstrs mline)))                     
-                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr))
+                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
                                           mstr)))
                  (charms/ll:wattroff mlwin (charms/ll:color-pair 1)))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
