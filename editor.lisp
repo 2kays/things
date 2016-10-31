@@ -40,8 +40,6 @@ Easy REPL setup - why doesn't paredit like #| |# ?
          :initarg :name
          :type string)
    (state :accessor buf-state
-          :initform (make-array 1 :element-type 'string :initial-element ""
-                                :adjustable t :fill-pointer t)
           :initarg :state)
    (cursor-x :accessor buf-cursor-x :initform 0 :type integer)
    (cursor-y :accessor buf-cursor-y :initform 0 :type integer)
@@ -49,20 +47,22 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 
 (defclass editor ()
   ((current :accessor editor-current :initform 0 :type integer)
-   (buffers :accessor editor-buffers :initform nil
-            :type list)
+   (buffers :accessor editor-buffers :initform nil :type list)
    (running :accessor editor-running :initform t :type boolean)
    (bufcount :accessor editor-bufcount :initform 0 :type integer)))
 
 (defparameter *editor-instance* nil
   "Global editor instance.")
 
-(defun make-buffer (&optional name (state ""))
+(defun make-buffer (&optional name state)
   "Creates a BUFFER with name NAME and state STATE (\"\" default)."
   (with-slots (bufcount) *editor-instance*
-   (make-instance 'buffer
-                  :name (or name (format nil "buffer~a" (incf bufcount)))
-                  :state state)))
+    (make-instance 'buffer
+                   :name (or name (format nil "buffer~a" (incf bufcount)))
+                   :state (or state (make-array 1 :element-type 'string
+                                      :initial-element ""
+                                      :adjustable t
+                                      :fill-pointer t)))))
 
 (defconstant +SIGINT+ 2
   "SIGINT UNIX signal code.")
@@ -93,13 +93,13 @@ Easy REPL setup - why doesn't paredit like #| |# ?
                    (state buf-state))
       (current-buffer)
     ;; TODO: this is awful, refactor
-    (loop :with spec := (list (cons "%p" (write-to-string
-                                          (truncate (* (/ y (max 1 (1- (length state))))
-                                                       100))))
-                              (cons "%x" (write-to-string x))
-                              (cons "%y" (write-to-string y))
-                              (cons "%b" name))
-       :with modified := string
+    (loop :with modified := string
+       :with spec := `(("%p" . ,(write-to-string
+                                 (truncate (* (/ y (max 1 (1- (length state))))
+                                              100))))
+                       ("%x" . ,(write-to-string x))
+                       ("%y" . ,(write-to-string y))
+                       ("%b" . ,name))
        :for (k . v) :in spec
        :do (setf modified (replace-all modified k v))
        :finally (return modified))))
