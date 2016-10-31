@@ -67,12 +67,11 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
 (defparameter *modeline-height* 1
   "The height of the mode line.")
 
-(defparameter *modeline-format*
-  '("%p% (%x,%y) : %b")
+(defparameter *modeline-format* " %p% (%x,%y) : %b "
   "Describes the format of the modeline at various sizes.")
 
-(defun modeline-formatter ()
-  "Returns the formatted modeline strings."
+(defun modeline-formatter (string)
+  "Returns the formatted modeline string."
   (with-accessors ((name buf-name) (x buf-cursor-x) (y buf-cursor-y)
                    (state buf-state))
       (current-buffer)
@@ -83,11 +82,10 @@ Easy REPL setup - why dpoesn't paredit like #| |# ?
                               (cons "%x" (write-to-string x))
                               (cons "%y" (write-to-string y))
                               (cons "%b" name))
-       :for s :in *modeline-format*
-       :collect (loop :with modified := s
-                   :for (k . v) :in spec
-                   :do (setf modified (replace-all modified k v))
-                   :finally (return modified)))))
+       :with modified := string
+       :for (k . v) :in spec
+       :do (setf modified (replace-all modified k v))
+       :finally (return modified))))
 
 (defparameter *current-keymap* nil
   "The current keymap for input lookups.")
@@ -311,7 +309,7 @@ is replaced with replacement."
          :for c := (charms:get-char charms:*standard-window* :ignore-error t)
          :do
          (charms/ll:werase cmdwin)
-         (charms/ll:waddstr cmdwin (concat "Command: " *command-typed*))
+         (charms/ll:waddstr cmdwin (concat " Command: " *command-typed*))
          (cond ((null c) nil)
                ((and (> (char-code c) 31)
                      (< (char-code c) 127))
@@ -438,17 +436,13 @@ current global keymap."
              ;; relevant y level
              (let* ((mlh *modeline-height*)
                     (winh (- theight mlh 1))
-                    (mstrs (modeline-formatter)))
+                    (mstr (modeline-formatter *modeline-format*)))
                ;; Draw the modeline
                (unless (zerop mlh)
-                 ;; oh no please don't tell me I need multiple ncurses windows
-                 ;; to implement multiple modelines...
                  (charms/ll:werase mlwin)
                  (charms/ll:wattron mlwin (charms/ll:color-pair 1))
-                 (dotimes (mline mlh)
-                   (let ((mstr (elt mstrs mline)))                     
-                     (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
-                                          mstr)))
+                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
+                                      mstr)
                  (charms/ll:wattroff mlwin (charms/ll:color-pair 1)))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
