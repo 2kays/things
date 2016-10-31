@@ -35,9 +35,7 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 ;;     - Display the result of a command if one is provided.
 ;;
 
-(defparameter *buffer-count* 0 "Count of created buffers for naming purposes.")
-
-(defclass buffer* ()
+(defclass buffer ()
   ((name :accessor buf-name
          :initarg :name
          :type string)
@@ -51,13 +49,20 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 
 (defclass editor ()
   ((current :accessor editor-current :initform 0 :type integer)
-   (buffers :accessor editor-buffers
-            :initform (list (make-instance 'buffer*))
+   (buffers :accessor editor-buffers :initform nil
             :type list)
    (running :accessor editor-running :initform t :type boolean)
    (bufcount :accessor editor-bufcount :initform 0 :type integer)))
 
-(defparameter *editor-instance* nil)
+(defparameter *editor-instance* nil
+  "Global editor instance.")
+
+(defun make-buffer (&optional name (state ""))
+  "Creates a BUFFER with name NAME and state STATE (\"\" default)."
+  (with-slots (bufcount) *editor-instance*
+   (make-instance 'buffer
+                  :name (or name (format nil "buffer~a" (incf bufcount)))
+                  :state state)))
 
 (defconstant +SIGINT+ 2
   "SIGINT UNIX signal code.")
@@ -106,6 +111,15 @@ Easy REPL setup - why doesn't paredit like #| |# ?
   "Concatenates ARGS to a string."
   (apply #'concatenate 'string args))
 
+(defun stream-to-array (stream)
+  "Return string stream STREAM as a vector of lines."
+  (loop :with vector := (make-array 0 :element-type 'string
+                                    :adjustable t :fill-pointer t)
+     :for (l s) := (multiple-value-list (read-line stream nil))
+     :do (vector-push-extend (if s (or l "") l) vector)
+     :until s
+     :finally (return vector)))
+
 (defun stream-to-list (stream)
   "Returns a string stream STREAM to a list, handling empty lines followed by
 EOF properly."
@@ -117,6 +131,11 @@ EOF properly."
   "Returns a list of lines of the file at PATH."
   (with-open-file (f path)
     (stream-to-list f)))
+
+(defun file-to-array (path)
+  "Returns a list of lines of the file at PATH."
+  (with-open-file (f path)
+    (stream-to-array f)))
 
 (defun file-to-string (path)
   "Dumps file at PATH to a string and returns it."
@@ -388,18 +407,10 @@ current global keymap."
   (setf *modeline-height* 1)
   (setf *current-keymap* nil)
   ;; if argv is set, open that file, else create an empty buffer
-  (let ((bname (or argv (format nil "buffer~s"
-                                (incf (editor-bufcount *editor-instance*)))))
-        (bstate (if argv
-                    (file-to-list argv)
-                    (list ""))))
-    (push (make-instance 'buffer*
-                         :name bname
-                         :state (make-array (length bstate) :element-type 'string
-                                            :fill-pointer t
-                                            :adjustable t
-                                            :initial-contents bstate))
-          (editor-buffers *editor-instance*)))
+  (push (if argv
+            (make-buffer argv (file-to-array argv))
+            (make-buffer))
+        (editor-buffers *editor-instance*))
   (charms:with-curses ()
     (charms/ll:start-color)
     (let ((theight 1)
