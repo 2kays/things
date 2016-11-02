@@ -270,22 +270,26 @@ is replaced with replacement."
 
 (defun backspace ()
   "Backspaces from cursor."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                   (state buf-state) (fx buf-furthest-x))
       (current-buffer)
     (cond ((zerop x)
+           (setf x (1+ (length (elt state (1- y))))
+                 fx x)
            (join-lines -1)
-           (decf y)
-           (setf x (1+ (length (elt state y)))))
+           (decf y))
           (t (setf (elt state y) (remove-at (elt state y) (1- x)))))
     (backward)))
 
 (defun delete-char ()
   "Deletes char at cursor."
-  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (state buf-state))
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
+                   (state buf-state) (fx buf-furthest-x))
       (current-buffer)
     (cond ((= x (length (elt state y)))
            (join-lines 1)
-           (setf x 0))
+           (setf x 0
+                 fx 0))
           (t (setf (elt state y) (remove-at (elt state y) x))))))
 
 (defun newline ()
@@ -327,31 +331,42 @@ is replaced with replacement."
       (forward))))
 
 (defparameter *command-typed* nil)
-(defun run-command ()
-  "Run a command input by the user. Hijacks the current key input."
-  (setf *command-typed* (make-array 0 :fill-pointer t :adjustable t
-                                    :element-type 'character))
-  (let ((theight 1) (twidth 1))
+
+(defun popup (prompt)
+  "Retrieves an input from the user. Hijacks the current key input."
+  (let ((theight 1) (twidth 1)
+        (typed (make-array 0 :fill-pointer t :adjustable t
+                           :element-type 'character)))
     (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
-    (let ((cmdwin (charms/ll:newwin 1 64 (1- theight) 0)))
-      (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
+    (let* ((ratio (floor (/ theight 3)))
+           (cmdwin (charms/ll:newwin ratio
+                                     (1- twidth) (- theight ratio 1) 0)))
+      ;; (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
+      (charms/ll:wbkgd cmdwin (charms/ll:color-pair 1))
       (loop :named cmd-loop
-         :while *editor-running*
+         :while (editor-running *editor-instance*)
          :for c := (charms:get-char charms:*standard-window* :ignore-error t)
          :do
          (charms/ll:werase cmdwin)
-         (charms/ll:waddstr cmdwin (concat " Command: " *command-typed*))
+         (charms/ll:waddstr cmdwin (concat prompt typed))
          (cond ((null c) nil)
                ((and (> (char-code c) 31)
                      (< (char-code c) 127))
-                (vector-push-extend c *command-typed*))
-               ((eql c #\Bel) (setf *command-typed* nil) (return-from cmd-loop))
-               ((eql c #\Del) (vector-pop *command-typed*))
+                (vector-push-extend c typed))
+               ((eql c #\Bel) (setf typed nil) (return-from cmd-loop))
+               ((eql c #\Del) (vector-pop typed))
                (t (return-from cmd-loop)))
          (charms/ll:wrefresh cmdwin))
-      (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
+      ;; (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
       (charms/ll:delwin cmdwin)
-      (and *command-typed* (eval (read-from-string *command-typed*))))))
+      (charms/ll:erase)
+      (charms/ll:refresh)
+      typed)))
+
+(defun run-command ()
+  "Run a command input by the user. Hijacks the current key input."
+  (let ((result (popup " Command: ")))
+    (when result (eval (read-from-string result)))))
 
 ;;; End of editor commands
 
@@ -360,8 +375,7 @@ is replaced with replacement."
     ))
 
 (defparameter *c-x-map*
-  `((#\Etx . ,#'exit-editor)            ; C-x C-c (NOT WORKING)
-    (#\q   . ,#'exit-editor)            ; C-x q
+  `((#\Etx . ,#'exit-editor)            ; C-x C-c
     ))
 
 (defparameter *root-keymap*
@@ -413,6 +427,7 @@ current global keymap."
         (editor-buffers *editor-instance*))
   (charms:with-curses ()
     (charms/ll:start-color)
+    (charms/ll:curs-set 2)
     (let ((theight 1)
           (twidth 1))
       ;; Set initial terminal size
@@ -429,7 +444,8 @@ current global keymap."
       ;; TODO: dynamically react to terminal height changes when allocating pad
       (let* ((page-cnt (ceiling (length (buf-state (current-buffer))) theight))
              (pad (charms/ll:newpad (* theight page-cnt) 150))
-             (mlwin (charms/ll:newwin *modeline-height* (1- twidth) (- theight *modeline-height*) 0)))
+             (mlwin (charms/ll:newwin *modeline-height* (1- twidth)
+                                      (- theight *modeline-height*) 0)))
         ;; Set up terminal behaviour
         ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
         (charms:disable-echoing)
@@ -463,10 +479,10 @@ current global keymap."
                ;; Draw the modeline
                (unless (zerop mlh)
                  (charms/ll:werase mlwin)
-                 (charms/ll:wattron mlwin (charms/ll:color-pair 1))
-                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1)
-                                      mstr)
-                 (charms/ll:wattroff mlwin (charms/ll:color-pair 1)))
+                 (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+                 ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
+                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr))
+               ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
