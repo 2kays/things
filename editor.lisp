@@ -49,7 +49,8 @@ Easy REPL setup - why doesn't paredit like #| |# ?
   ((current :accessor editor-current :initform 0 :type integer)
    (buffers :accessor editor-buffers :initform nil :type list)
    (running :accessor editor-running :initform t :type boolean)
-   (bufcount :accessor editor-bufcount :initform 0 :type integer)))
+   (bufcount :accessor editor-bufcount :initform 0 :type integer)
+   (command-result :accessor editor-cmd-result :initform "" :type string)))
 
 (defparameter *editor-instance* nil
   "Global editor instance.")
@@ -217,7 +218,7 @@ is replaced with replacement."
                            (and (= x (length (elt state y)))
                                 (= y (1- (length state)))
                                 (< 0 del)))
-                (incf x del))
+                 (incf x del))
                (cond ((and (> x (length (elt state y)))
                            (< y (1- (length state))))
                       ;; wrap to next line if we aren't on the last one
@@ -332,15 +333,15 @@ is replaced with replacement."
 
 (defparameter *command-typed* nil)
 
-(defun popup (prompt)
+(defun popup (prompt height)
   "Retrieves an input from the user. Hijacks the current key input."
   (let ((theight 1) (twidth 1)
         (typed (make-array 0 :fill-pointer t :adjustable t
                            :element-type 'character)))
     (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
-    (let* ((ratio (floor (/ theight 3)))
-           (cmdwin (charms/ll:newwin ratio
-                                     (1- twidth) (- theight ratio 1) 0)))
+    (let* (;; (ratio (floor (/ theight 3)))
+           (cmdwin (charms/ll:newwin height
+                                     (1- twidth) (- theight height 1) 0)))
       ;; (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
       (charms/ll:wbkgd cmdwin (charms/ll:color-pair 1))
       (loop :named cmd-loop
@@ -365,8 +366,10 @@ is replaced with replacement."
 
 (defun run-command ()
   "Run a command input by the user. Hijacks the current key input."
-  (let ((result (popup " Command: ")))
-    (when result (eval (read-from-string result)))))
+  (let ((result (popup " Command: " 1)))
+    (when result
+      (setf (editor-cmd-result *editor-instance*)
+            (format nil "~S" (eval (read-from-string result)))))))
 
 ;;; End of editor commands
 
@@ -482,15 +485,18 @@ current global keymap."
                  (charms/ll:werase mlwin)
                  (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                  ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
+                 (charms/ll:mvwaddstr mlwin 0 0 (editor-cmd-result *editor-instance*))
                  (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
                  ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
+                 (charms/ll:wnoutrefresh mlwin)
                  )
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                (charms/ll:wmove pad y x)
-               (charms/ll:wnoutrefresh mlwin)
-               (charms/ll:pnoutrefresh pad (* (1+ winh) (floor (/ y (1+ winh)))) 0 0 0
+               
+               ;; TODO: refactor this to account for *modeline-height* = 0
+               (charms/ll:pnoutrefresh pad (* (+ 1 winh) (floor (/ y (+ 1 winh)))) 0 0 0
                                        winh (- twidth 1))
                (charms/ll:doupdate))))
         ;; Cleanup
