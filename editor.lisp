@@ -428,6 +428,7 @@ current global keymap."
   (charms:with-curses ()
     (charms/ll:start-color)
     (charms/ll:curs-set 2)
+    (charms/ll:werase charms/ll:*stdscr*)
     (let ((theight 1)
           (twidth 1))
       ;; Set initial terminal size
@@ -481,15 +482,16 @@ current global keymap."
                  (charms/ll:werase mlwin)
                  (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                  ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
-                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr))
-               ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
+                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
+                 ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
+                 )
                ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                (charms/ll:wmove pad y x)
                (charms/ll:wnoutrefresh mlwin)
-               (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
-                                       (1- winh) (- twidth 1))
+               (charms/ll:pnoutrefresh pad (* (1+ winh) (floor (/ y (1+ winh)))) 0 0 0
+                                       winh (- twidth 1))
                (charms/ll:doupdate))))
         ;; Cleanup
         ;; (charms/ll:init-pair 1 charms/ll:color_black charms/ll:color_white)
