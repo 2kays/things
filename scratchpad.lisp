@@ -41,3 +41,17 @@
                      (compose (rest l) (cdr c))))))
     (compose (reverse list) cons)))
 
+(defobj quadrilateral
+    ((x 10) (y 10))
+  (area () (* x y)))
+
+(defmacro defobj (name slots &rest methods)
+  "Some sort of object definition macro..."
+  (let ((msg (gensym "DEFOBJ-MSG"))
+        (args (gensym "DEFOBJ-ARGS")))
+    `(defun ,name (,msg &rest ,args)
+       (let ,slots
+         (case ,msg
+           ,@(loop :for (name llist body) :in methods
+                :collect `((,name) (funcall (lambda ,llist ,body) ,args))))))))
+
