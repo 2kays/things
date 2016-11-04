@@ -331,7 +331,8 @@ is replaced with replacement."
       (setf (elt state y) (format nil "~a~a~a" s1 c s2))
       (forward))))
 
-(defparameter *command-typed* nil)
+(defun quit-command ()
+  (setf (editor-cmd-result *editor-instance*) "Quit!"))
 
 (defun popup (prompt height)
   "Retrieves an input from the user. Hijacks the current key input."
@@ -361,7 +362,7 @@ is replaced with replacement."
       ;; (charms/ll:wattron cmdwin (charms/ll:color-pair 1))
       (charms/ll:delwin cmdwin)
       (charms/ll:erase)
-      (charms/ll:refresh)
+      ;;(charms/ll:refresh)
       typed)))
 
 (defun run-command ()
@@ -394,6 +395,12 @@ is replaced with replacement."
     (#\Enq . line-end)                  ; C-e
     (#\Soh . line-beginning)            ; C-a
     (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
+    (#\Bel . quit-command)              ; C-g
+    ))
+
+(defparameter *key-lookup*
+  '((#\Can . "C-x ")                    ; C-x
+    (#\Esc . "ESC ")                    ; ESC
     ))
 
 (defun resolve-key (c)
@@ -412,9 +419,15 @@ current global keymap."
                  (funcall entry)
                  (setf *current-keymap* nil))
                 ((consp entry)
-                 (setf *current-keymap* entry))
-                (t (setf *current-keymap* nil))))
-        (setf *current-keymap* nil))))
+                 (setf *current-keymap* entry)
+                 (setf (editor-cmd-result *editor-instance*)
+                       (cdr (assoc c *key-lookup*))))
+                (t (setf *current-keymap* nil)
+                   (setf (editor-cmd-result *editor-instance*)
+                         "Unknown keybind."))))
+        (progn (setf *current-keymap* nil)
+               (setf (editor-cmd-result *editor-instance*)
+                     "Unknown keybind.")))))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
