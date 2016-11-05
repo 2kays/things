@@ -451,9 +451,9 @@ current global keymap."
                   (lambda (c)
                     (declare (ignore c))
                     (invoke-restart 'editor-sigint))))
-    (main2 argv)))
+    (%main argv)))
 
-(defun main2 (&optional argv)
+(defun %main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; Resolve C-c SIGINTs to C-c in the keymap
   ;;(set-signal-handler +SIGINT+ (resolve-key #\Etx))
@@ -502,7 +502,12 @@ current global keymap."
            (restart-case
                (progn
                  ;; Update terminal height and width
-                 (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+                 (let ((last-theight theight)
+                       (last-twidth twidth))
+                   (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)                   
+                   (if (or (/= theight last-theight)
+                           (/= twidth last-twidth))
+                       (charms/ll:wresize mlwin *modeline-height* (1- twidth))))
                  (with-accessors ((name buf-name) (x buf-cursor-x)
                                   (y buf-cursor-y) (state buf-state))
                      (current-buffer)
@@ -538,7 +543,8 @@ current global keymap."
                      (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
                                              (1- winh) (- twidth 1))
                      (charms/ll:doupdate))))
-             (editor-sigint () (resolve-key #\Etx))))
+             (editor-sigint ()
+               (resolve-key #\Etx))))
         ;; Cleanup
         ;; (charms/ll:init-pair 1 charms/ll:color_black charms/ll:color_white)
         (charms/ll:delwin pad)
