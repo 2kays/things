@@ -369,9 +369,6 @@ is replaced with replacement."
       (setf (editor-msg *editor-instance*)
             (format nil " => ~S" (eval (read-from-string result)))))))
 
-;; Uhh.. C-c triggering this throws us into ldb when the popup arises.
-;; This is probably related to the naive way in which I'm handling signals
-;; https://github.com/mrkkrp/shtookovina/blob/master/src/session.lisp#L256-L266
 (defun exit-editor (&optional force)
   "Exits the editor."
   (if (not force)
