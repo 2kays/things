@@ -406,13 +406,13 @@ is replaced with replacement."
   (< 31 (char-code char) 127))
 
 (defun prettify-char (char)
-  "Prettify CHAR (e.g. #\Bel -> \"C-g\""
+  "Prettify CHAR (e.g. #\Bel -> \"C-g\")."
   (cond ((printablep char) char)
         ((char= char #\Esc) "ESC")
         ((char= char #\Backspace) "<backspace>")
         ((< 0 (char-code char) 32)
          (concat "C-" (string (code-char (+ 96 (char-code char))))))
-        (t "UNPRINTABLE")))
+        (t (concat "\\" (write-to-string (char-code char))))))
 
 (defun resolve-key (c)
   "Resolves an input key C to a command or nested keymap according to the
@@ -448,7 +448,7 @@ current global keymap."
   ;; Resolve C-c SIGINTs to C-c in the keymap
   (set-signal-handler +SIGINT+ (resolve-key #\Etx))
   (setf *editor-instance* (make-instance 'editor))
-  (setf *modeline-height* 1)
+
   (setf *current-keymap* nil)
   ;; if argv is set, open that file, else create an empty buffer
   (push (if argv
@@ -497,15 +497,13 @@ current global keymap."
              (cond ((null c) nil)       ; ignore nils
                    ;; 32->126 are printable, so print c if it's not a part of
                    ;; a meta command
-                   ((and (> (char-code c) 31)
-                         (< (char-code c) 127)
-                         (not *current-keymap*))
+                   ((and (printablep c) (not *current-keymap*))
                     (insert-char c))
                    (t (resolve-key c)))
              ;; write the updated file state to the pad and display it at the
              ;; relevant y level
              (let* ((mlh *modeline-height*)
-                    (winh (- theight mlh 1))
+                    (winh (- theight mlh))
                     (mstr (modeline-formatter *modeline-format*)))
                ;; Draw the modeline
                (unless (zerop mlh)
@@ -521,10 +519,9 @@ current global keymap."
                (charms/ll:werase pad)
                (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                (charms/ll:wmove pad y x)
-               
                ;; TODO: refactor this to account for *modeline-height* = 0
-               (charms/ll:pnoutrefresh pad (* (+ 1 winh) (floor (/ y (+ 1 winh)))) 0 0 0
-                                       winh (- twidth 1))
+               (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
+                                       (1- winh) (- twidth 1))
                (charms/ll:doupdate))))
         ;; Cleanup
         ;; (charms/ll:init-pair 1 charms/ll:color_black charms/ll:color_white)
