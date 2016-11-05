@@ -50,7 +50,7 @@ Easy REPL setup - why doesn't paredit like #| |# ?
    (buffers :accessor editor-buffers :initform nil :type list)
    (running :accessor editor-running :initform t :type boolean)
    (bufcount :accessor editor-bufcount :initform 0 :type integer)
-   (command-result :accessor editor-cmd-result :initform "" :type string)))
+   (message :accessor editor-msg :initform "" :type string)))
 
 (defparameter *editor-instance* nil
   "Global editor instance.")
@@ -111,6 +111,9 @@ Easy REPL setup - why doesn't paredit like #| |# ?
 (defun concat (&rest args)
   "Concatenates ARGS to a string."
   (apply #'concatenate 'string args))
+
+(define-modify-macro concatf (&rest args)
+  concat "Concatenate strings into place.")
 
 (defun stream-to-array (stream)
   "Return string stream STREAM as a vector of lines."
@@ -332,7 +335,7 @@ is replaced with replacement."
       (forward))))
 
 (defun quit-command ()
-  (setf (editor-cmd-result *editor-instance*) "Quit!"))
+  (setf (editor-msg *editor-instance*) "Quit!"))
 
 (defun popup (prompt height)
   "Retrieves an input from the user. Hijacks the current key input."
@@ -367,10 +370,10 @@ is replaced with replacement."
 
 (defun run-command ()
   "Run a command input by the user. Hijacks the current key input."
-  (let ((result (popup " Command: " 1)))
+  (let ((result (popup " Eval: " 1)))
     (when result
-      (setf (editor-cmd-result *editor-instance*)
-            (format nil "~S" (eval (read-from-string result)))))))
+      (setf (editor-msg *editor-instance*)
+            (format nil " => ~S" (eval (read-from-string result)))))))
 
 ;;; End of editor commands
 
@@ -403,12 +406,17 @@ is replaced with replacement."
     (#\Esc . "ESC ")                    ; ESC
     ))
 
+(define-modify-macro appendf (&rest args) 
+  append "Append onto list")
+
 (defun resolve-key (c)
   "Resolves an input key C to a command or nested keymap according to the
 current global keymap."
   (let* ((entry-pair (assoc c (if *current-keymap*
                                   *current-keymap*
-                                  *root-keymap*))))
+                                  (prog1 *root-keymap*
+                                    (setf (editor-msg *editor-instance*)
+                                          ""))))))
     ;; if the entry for the keymap has resolved to something
     ;; if it's a function/symbol, run it
     ;; if it's a list, set the current keymap to it
@@ -420,14 +428,12 @@ current global keymap."
                  (setf *current-keymap* nil))
                 ((consp entry)
                  (setf *current-keymap* entry)
-                 (setf (editor-cmd-result *editor-instance*)
+                 (concatf (editor-msg *editor-instance*)
                        (cdr (assoc c *key-lookup*))))
                 (t (setf *current-keymap* nil)
-                   (setf (editor-cmd-result *editor-instance*)
-                         "Unknown keybind."))))
+                   (concatf (editor-msg *editor-instance*) (string c) " is invalid."))))
         (progn (setf *current-keymap* nil)
-               (setf (editor-cmd-result *editor-instance*)
-                     "Unknown keybind.")))))
+               (concatf (editor-msg *editor-instance*) (string c) " is unbound.")))))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
@@ -464,7 +470,7 @@ current global keymap."
              (mlwin (charms/ll:newwin *modeline-height* (1- twidth)
                                       (- theight *modeline-height*) 0)))
         ;; Set up terminal behaviour
-        ;;        (charms:clear-window charms:*standard-window* :force-repaint t)
+        ;; (charms:clear-window charms:*standard-window* :force-repaint t)
         (charms:disable-echoing)
         (charms:enable-raw-input :interpret-control-characters t)
         (charms:enable-non-blocking-mode charms:*standard-window*)
@@ -498,7 +504,7 @@ current global keymap."
                  (charms/ll:werase mlwin)
                  (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
                  ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
-                 (charms/ll:mvwaddstr mlwin 0 0 (editor-cmd-result *editor-instance*))
+                 (charms/ll:mvwaddstr mlwin 0 0 (editor-msg *editor-instance*))
                  (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
                  ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
                  (charms/ll:wnoutrefresh mlwin)
