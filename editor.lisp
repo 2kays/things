@@ -448,9 +448,19 @@ current global keymap."
                         (string (prettify-char c)) " is unbound.")))))
 
 (defun main (&optional argv)
+  "True entrypoint for the editor. Sets up the C-c condition handler."
+  ;; This is likely wrong of me, however it does work...
+  (handler-bind ((sb-sys:interactive-interrupt
+                  (lambda (c)
+                    (declare (ignore c))
+                    (invoke-restart 'editor-sigint))))
+    (main2 argv)))
+
+(defun main2 (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
   ;; Resolve C-c SIGINTs to C-c in the keymap
-  (set-signal-handler +SIGINT+ (resolve-key #\Etx))
+  ;;(set-signal-handler +SIGINT+ (resolve-key #\Etx))
+  ;; (sb-ext:disable-debugger)
   (setf *editor-instance* (make-instance 'editor))
 
   (setf *current-keymap* nil)
@@ -490,43 +500,48 @@ current global keymap."
            :while (editor-running *editor-instance*)
            :for c := (charms:get-char charms:*standard-window* :ignore-error t)
            :do
-           ;; Update terminal height and width
-           (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
-           (with-accessors ((name buf-name) (x buf-cursor-x)
-                            (y buf-cursor-y) (state buf-state))
-               (current-buffer)
-             ;; if we previously pressed the meta key, resolve commands from the
-             ;; meta map, otherwise use the standard root key map
-             ;;(if c (format t "received ~s~%" c))
-             (cond ((null c) nil)       ; ignore nils
-                   ;; 32->126 are printable, so print c if it's not a part of
-                   ;; a meta command
-                   ((and (printablep c) (not *current-keymap*))
-                    (insert-char c))
-                   (t (resolve-key c)))
-             ;; write the updated file state to the pad and display it at the
-             ;; relevant y level
-             (let* ((mlh *modeline-height*)
-                    (winh (- theight mlh))
-                    (mstr (modeline-formatter *modeline-format*)))
-               ;; Draw the modeline
-               (unless (zerop mlh)
-                 (charms/ll:werase mlwin)
-                 (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
-                 ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
-                 (charms/ll:mvwaddstr mlwin 0 0 (editor-msg *editor-instance*))
-                 (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
-                 ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
-                 (charms/ll:wnoutrefresh mlwin)
-                 )
-               ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
-               (charms/ll:werase pad)
-               (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
-               (charms/ll:wmove pad y x)
-               ;; TODO: refactor this to account for *modeline-height* = 0
-               (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
-                                       (1- winh) (- twidth 1))
-               (charms/ll:doupdate))))
+           ;; Set up our happy C-c/SIGINT handling restart
+           ;; TODO: refactor this to be less bleurgh
+           (restart-case
+               (progn
+                 ;; Update terminal height and width
+                 (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+                 (with-accessors ((name buf-name) (x buf-cursor-x)
+                                  (y buf-cursor-y) (state buf-state))
+                     (current-buffer)
+                   ;; if we previously pressed the meta key, resolve commands from the
+                   ;; meta map, otherwise use the standard root key map
+                   ;;(if c (format t "received ~s~%" c))
+                   (cond ((null c) nil) ; ignore nils
+                         ;; 32->126 are printable, so print c if it's not a part of
+                         ;; a meta command
+                         ((and (printablep c) (not *current-keymap*))
+                          (insert-char c))
+                         (t (resolve-key c)))
+                   ;; write the updated file state to the pad and display it at the
+                   ;; relevant y level
+                   (let* ((mlh *modeline-height*)
+                          (winh (- theight mlh))
+                          (mstr (modeline-formatter *modeline-format*)))
+                     ;; Draw the modeline
+                     (unless (zerop mlh)
+                       (charms/ll:werase mlwin)
+                       (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+                       ;; (charms/ll:wattron mlwin (charms/ll:color-pair 1))
+                       (charms/ll:mvwaddstr mlwin 0 0 (editor-msg *editor-instance*))
+                       (charms/ll:mvwaddstr mlwin 0 (- twidth (length mstr) 1) mstr)
+                       ;; (charms/ll:wattroff mlwin (charms/ll:color-pair 1))
+                       (charms/ll:wnoutrefresh mlwin)
+                       )
+                     ;; (charms/ll:wbkgd mlwin (charms/ll:color-pair 1))
+                     (charms/ll:werase pad)
+                     (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
+                     (charms/ll:wmove pad y x)
+                     ;; TODO: refactor this to account for *modeline-height* = 0
+                     (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
+                                             (1- winh) (- twidth 1))
+                     (charms/ll:doupdate))))
+             (editor-sigint () (resolve-key #\Etx))))
         ;; Cleanup
         ;; (charms/ll:init-pair 1 charms/ll:color_black charms/ll:color_white)
         (charms/ll:delwin pad)
