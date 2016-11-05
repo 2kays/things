@@ -401,13 +401,18 @@ is replaced with replacement."
     (#\Bel . quit-command)              ; C-g
     ))
 
-(defparameter *key-lookup*
-  '((#\Can . "C-x ")                    ; C-x
-    (#\Esc . "ESC ")                    ; ESC
-    ))
+(defun printablep (char)
+  "Checks if CHAR is a printable ASCII character."
+  (< 31 (char-code char) 127))
 
-(define-modify-macro appendf (&rest args) 
-  append "Append onto list")
+(defun prettify-char (char)
+  "Prettify CHAR (e.g. #\Bel -> \"C-g\""
+  (cond ((printablep char) char)
+        ((char= char #\Esc) "ESC")
+        ((char= char #\Backspace) "<backspace>")
+        ((< 0 (char-code char) 32)
+         (concat "C-" (string (code-char (+ 96 (char-code char))))))
+        (t "UNPRINTABLE")))
 
 (defun resolve-key (c)
   "Resolves an input key C to a command or nested keymap according to the
@@ -415,6 +420,7 @@ current global keymap."
   (let* ((entry-pair (assoc c (if *current-keymap*
                                   *current-keymap*
                                   (prog1 *root-keymap*
+                                    ;; If it's the root keymap, reset the msg
                                     (setf (editor-msg *editor-instance*)
                                           ""))))))
     ;; if the entry for the keymap has resolved to something
@@ -429,11 +435,13 @@ current global keymap."
                 ((consp entry)
                  (setf *current-keymap* entry)
                  (concatf (editor-msg *editor-instance*)
-                       (cdr (assoc c *key-lookup*))))
+                          (string (prettify-char c)) " "))
                 (t (setf *current-keymap* nil)
-                   (concatf (editor-msg *editor-instance*) (string c) " is invalid."))))
+                   (concatf (editor-msg *editor-instance*)
+                            (string (prettify-char c)) " is invalid."))))
         (progn (setf *current-keymap* nil)
-               (concatf (editor-msg *editor-instance*) (string c) " is unbound.")))))
+               (concatf (editor-msg *editor-instance*)
+                        (string (prettify-char c)) " is unbound.")))))
 
 (defun main (&optional argv)
   "Entrypoint for the editor. ARGV should contain a file path."
