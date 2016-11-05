@@ -306,12 +306,6 @@ is replaced with replacement."
       (down)
       (line-beginning))))
 
-(defun exit-editor (&optional force)
-  "Exits the editor."
-  (if (not force) nil) ;; change this to ask the user if they're sure
-  (format t "Exiting..~%")
-  (setf (editor-running *editor-instance*) nil))
-
 (defun line-end ()
   "Jumps to the end of a line."
   (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
@@ -374,6 +368,16 @@ is replaced with replacement."
     (when result
       (setf (editor-msg *editor-instance*)
             (format nil " => ~S" (eval (read-from-string result)))))))
+
+;; Uhh.. C-c triggering this throws us into ldb when the popup arises.
+;; This is probably related to the naive way in which I'm handling signals
+;; https://github.com/mrkkrp/shtookovina/blob/master/src/session.lisp#L256-L266
+(defun exit-editor (&optional force)
+  "Exits the editor."
+  (if (not force)
+      (if (equal (popup " Are you sure you want to quit? (y/n) " 1) "y")
+          (setf (editor-running *editor-instance*) nil))
+      (setf (editor-running *editor-instance*) nil)))
 
 ;;; End of editor commands
 
