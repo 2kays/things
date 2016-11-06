@@ -43,7 +43,8 @@ Easy REPL setup - why doesn't paredit like #| |# ?
           :initarg :state)
    (cursor-x :accessor buf-cursor-x :initform 0 :type integer)
    (cursor-y :accessor buf-cursor-y :initform 0 :type integer)
-   (furthest-x :accessor buf-furthest-x :initform 0 :type integer)))
+   (furthest-x :accessor buf-furthest-x :initform 0 :type integer)
+   (view :accessor buf-view :initform 0 :type integer)))
 
 (defclass editor ()
   ((current :accessor editor-current :initform 0 :type integer)
@@ -386,10 +387,33 @@ is replaced with replacement."
           (setf (editor-running *editor-instance*) nil))
       (setf (editor-running *editor-instance*) nil)))
 
+(defun scroll (amount)
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (view buf-view))
+      (current-buffer)
+    (incf view amount)
+    (setf view (max view 0))))
+
+(defun scroll-page-down ()
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (view buf-view))
+      (current-buffer)
+    (let (theight twidth)
+      (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+      (down theight)
+      (scroll (- (1+ theight) *modeline-height*)))))
+
+(defun scroll-page-up ()
+  (with-accessors ((x buf-cursor-x) (y buf-cursor-y) (view buf-view))
+      (current-buffer)
+    (let (theight twidth)
+      (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+      (up theight)
+      (scroll (- (- (1+ theight) *modeline-height*))))))
+
 ;;; End of editor commands
 
 (defparameter *meta-map*
   `((#\x . run-command)                 ; M-x
+    (#\v . scroll-page-up)              ; M-v
     ))
 
 (defparameter *c-x-map*
@@ -410,6 +434,7 @@ is replaced with replacement."
     (#\Soh . line-beginning)            ; C-a
     (#\Esc . ,*meta-map*)               ; meta key (alt/esc)
     (#\Bel . quit-command)              ; C-g
+    (#\Syn . scroll-page-down)          ; C-v
     ))
 
 (defun printablep (char)
@@ -521,7 +546,8 @@ current global keymap."
                      (charms/ll:wresize mlwin *modeline-height* (1- twidth))
                      (charms/ll:mvwin mlwin (- theight *modeline-height*) 0)))
                  (with-accessors ((name buf-name) (x buf-cursor-x)
-                                  (y buf-cursor-y) (state buf-state))
+                                  (y buf-cursor-y) (state buf-state)
+                                  (view buf-view))
                      (current-buffer)
                    ;; if we previously pressed the meta key, resolve commands from the
                    ;; meta map, otherwise use the standard root key map
@@ -551,8 +577,7 @@ current global keymap."
                      (charms/ll:werase pad)
                      (charms/ll:mvwaddstr pad 0 0 (state-to-string state))
                      (charms/ll:wmove pad y x)
-                     ;; TODO: refactor this to account for *modeline-height* = 0
-                     (charms/ll:pnoutrefresh pad (* winh (floor (/ y winh))) 0 0 0
+                     (charms/ll:pnoutrefresh pad view 0 0 0
                                              (1- winh) (- twidth 1))
                      (charms/ll:doupdate))))
              (editor-sigint ()
