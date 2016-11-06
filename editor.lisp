@@ -50,7 +50,17 @@ Easy REPL setup - why doesn't paredit like #| |# ?
    (buffers :accessor editor-buffers :initform nil :type list)
    (running :accessor editor-running :initform t :type boolean)
    (bufcount :accessor editor-bufcount :initform 0 :type integer)
-   (message :accessor editor-msg :initform "" :type string)))
+   (message :accessor editor-msg :initform " " :type string)))
+
+(defparameter *welcomes*
+  '("Babbymacs welcomes you!"
+    "You have entered Babbymacs."
+    "Yes, this is Babbymacs."
+    "Babbymacs needs no intro."))
+
+(defun random-from-list (list)
+  "Selects a random element from LIST."
+  (elt list (random (length list))))
 
 (defparameter *editor-instance* nil
   "Global editor instance.")
@@ -379,11 +389,11 @@ is replaced with replacement."
 ;;; End of editor commands
 
 (defparameter *meta-map*
-  `((#\x . ,#'run-command)
+  `((#\x . run-command)                 ; M-x
     ))
 
 (defparameter *c-x-map*
-  `((#\Etx . ,#'exit-editor)            ; C-x C-c
+  `((#\Etx . exit-editor)               ; C-x C-c
     ))
 
 (defparameter *root-keymap*
@@ -423,7 +433,7 @@ current global keymap."
                                   (prog1 *root-keymap*
                                     ;; If it's the root keymap, reset the msg
                                     (setf (editor-msg *editor-instance*)
-                                          ""))))))
+                                          " "))))))
     ;; if the entry for the keymap has resolved to something
     ;; if it's a function/symbol, run it
     ;; if it's a list, set the current keymap to it
@@ -459,7 +469,8 @@ current global keymap."
   ;;(set-signal-handler +SIGINT+ (resolve-key #\Etx))
   ;; (sb-ext:disable-debugger)
   (setf *editor-instance* (make-instance 'editor))
-
+  (setf (editor-msg *editor-instance*)
+        (concat " " (random-from-list *welcomes*)))
   (setf *current-keymap* nil)
   ;; if argv is set, open that file, else create an empty buffer
   (push (if argv
@@ -508,8 +519,7 @@ current global keymap."
                    (when (or (/= theight last-theight)
                              (/= twidth last-twidth))
                      (charms/ll:wresize mlwin *modeline-height* (1- twidth))
-                     (charms/ll:mvwin mlwin (- theight *modeline-height*) 0)
-                     ))
+                     (charms/ll:mvwin mlwin (- theight *modeline-height*) 0)))
                  (with-accessors ((name buf-name) (x buf-cursor-x)
                                   (y buf-cursor-y) (state buf-state))
                      (current-buffer)
