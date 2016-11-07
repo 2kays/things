@@ -257,12 +257,19 @@ is replaced with replacement."
   "Moves the cursor down."
   (labels ((down-1 (del)
              (with-accessors ((x buf-cursor-x) (y buf-cursor-y)
-                              (state buf-state) (fx buf-furthest-x))
+                              (state buf-state) (fx buf-furthest-x)
+                              (view buf-view))
                  (current-buffer)
                ;; bounds checking: first clause is up, second is down
                (when (or (and (< del 0) (> y 0))
                          (and (> del 0) (< y (1- (length state)))))
                  (incf y del)
+                 (let (theight twidth)
+                   (charms/ll:getmaxyx charms/ll:*stdscr* theight twidth)
+                  (if (> y (+ view (- theight *modeline-height* 1)))
+                      (scroll (floor (/ theight 2))))
+                  (if (< y view)
+                      (scroll (- (floor (/ theight 2))))))
                  ;; handle furthest column
                  (setf x (min fx (length (elt state y))))))))
     (let ((sign (signum delta)))
